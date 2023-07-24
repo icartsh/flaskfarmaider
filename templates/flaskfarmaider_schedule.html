@@ -1,0 +1,216 @@
+{% extends 'flaskfarmaider.html' %}
+{% block content %}
+
+{{ macros.m_modal_start('sch-add-modal', '일정 추가', 'modal-lg') }}
+<form id='sch-setting'>
+    {{ macros.setting_select(
+            'sch-task',
+            '업무',
+            [
+                [ TASK_KEYS[0], TASKS[TASK_KEYS[0]]['name'] ],
+                [ TASK_KEYS[1], TASKS[TASK_KEYS[1]]['name'] ],
+                [ TASK_KEYS[2], TASKS[TASK_KEYS[2]]['name'] ],
+                [ TASK_KEYS[3], TASKS[TASK_KEYS[3]]['name'] ],
+                [ TASK_KEYS[4], TASKS[TASK_KEYS[4]]['name'] ],
+                [ TASK_KEYS[5], TASKS[TASK_KEYS[5]]['name'] ],
+                [ TASK_KEYS[6], TASKS[TASK_KEYS[6]]['name'] ],
+                [ TASK_KEYS[7], TASKS[TASK_KEYS[7]]['name'] ],
+            ],
+            desc=None
+        )
+    }}
+    {{ macros.setting_input_text('sch-description', '설명') }}
+    {{ macros.m_hr() }}
+    {{ macros.setting_input_text('sch-target-path', '로컬 경로', desc=['Flaskfarm에서 접근 가능한 로컬 경로', '"새로고침 후 주기적 스캔"일 경우 주기적 스캔 항목의 ID 번호']) }}
+    {{ macros.setting_input_text('sch-vfs', 'VFS 리모트', desc=['ex. gds:'], col='5') }}
+    {{ macros.setting_checkbox('sch-recursive', 'recursive', desc='Rclone 관련 작업에만 적용됩니다.') }}
+    {{ macros.m_hr() }}
+    {{ macros.setting_radio_with_value(
+        'sch-schedule-mode',
+        '일정 방식',
+        [
+            [FF_SCHEDULE_KEYS[0], FF_SCHEDULES[FF_SCHEDULE_KEYS[0]]['name']],
+            [FF_SCHEDULE_KEYS[1], FF_SCHEDULES[FF_SCHEDULE_KEYS[1]]['name']],
+            [FF_SCHEDULE_KEYS[2], FF_SCHEDULES[FF_SCHEDULE_KEYS[2]]['name']],
+        ]
+    ) }}
+    {{ macros.setting_input_text('sch-schedule-interval', '시간 간격', desc=['Interval(minute 단위)이나 Cron 설정'], col='5') }}
+    {{ macros.setting_checkbox('sch-schedule-auto-start', '시작시 일정 등록', desc=None) }}
+
+</form>
+{{ macros.m_modal_end_with_button(
+  [
+    ['sch-save-btn', '일정 저장'],
+  ]
+) }}
+
+<form id="form_search">
+    <div class="input-group mb-3">
+        <div class="input-group-prepend">
+            <select id="order" name="order" class="form-control">
+                <option value="desc">최근순</option>
+                <option value="asc">오래된순</option>
+            </select>
+            <select id="option1" name="option1" class="form-control">
+                <option value="all">전체</option>
+                {% for task in TASK_KEYS %}
+                <option value="{{ task }}">{{ TASKS[task]['name'] }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <input id="keyword" name="keyword" class="form-control" type="text" placeholder="검색..." aria-label="Search">
+        <div class="input-group-append">
+            <div class="btn-group" role="group">
+                <button type="button" id="globalSearchSearchBtn" class="btn btn-outline-primary">검색</button>
+                <button type="button" id="globalSearchResetBtn" class="btn btn-outline-primary">리셋</button>
+            </div>
+        </div>
+    </div>
+</form>
+<div class="text-right" role="group">
+    <button type="button" id="sch-add-btn" class="btn btn-lg btn-block btn-primary">일정 추가</button>
+</div>
+<hr class="border border-secondary">
+
+<table id="sch-list-table" class="table table-hover table-sm table-striped align-bottom table-responsive-sm">
+    <thead>
+        <tr class="text-primary">
+            <th scope="col" class="w-auto text-center">ID</th>
+            <th scope="col" class="w-auto text-center">작업</th>
+            <th scope="col" class="w-auto text-center">주기</th>
+            <th scope="col" class="w-auto">내용</th>
+            <th scope="col" class="w-auto text-center">활성화</th>
+            <th scope="col" class="w-auto text-center">상태</th>
+            <th scope="col" class="w-auto text-center">최근 실행</th>
+            <th scope="col" class="w-auto text-center">메뉴</th>
+        </tr>
+    </thead>
+    <tbody class="table-group-divider align-middle accordion" id="sch-accordion">
+    </tbody>
+    <tfoot>
+    </tfoot>
+</table>
+<div id="page1"></div>
+<div id="page2" disalbed class="d-none"></div>
+
+<hr class="border border-secondary">
+<!-- browser -->
+<div class="input-group mb-3">
+    <input id="working-directory" placeholder="/home" type="text" value="{{ args[module_name ~ '_working_directory'] }}" class="form-control" />
+    <div class="input-group-append">
+        <button id="working-directory-submit" type="button" class="btn btn-outline-primary">이동</button>
+    </div>
+</div>
+</br>
+
+<table id="brw-list-table" class="table table-hover table-striped align-bottom">
+    <thead>
+        <tr class="text-primary">
+            <th scope="col" class="w-auto pl-3">이름</th>
+            <th scope="col" class="w-auto text-right">크기</th>
+            <th scope="col" class="w-auto text-center pr-3">수정한 날짜</th>
+        </tr>
+    </thead>
+    <thead class="dir-parent"></thead>
+    <tbody class="table-group-divider align-middle"></tbody>
+    <tfoot></tfoot>
+</table>
+
+<script type="text/javascript">
+
+    $(function() {
+        // 초기 일정 불러오기
+        // f'{order}|{page}|{search}|{option1}|{option2}')
+        if (LAST_LIST_OPTIONS.length == 5) {
+            $('#order').prop('value', LAST_LIST_OPTIONS[0]);
+            $('#keyword').prop('value', LAST_LIST_OPTIONS[2]);
+            $('#option1').prop('value', LAST_LIST_OPTIONS[3]);
+            $('#option2').prop('value', LAST_LIST_OPTIONS[4]);
+            globalRequestSearch(LAST_LIST_OPTIONS[1]);
+        } else {
+            globalRequestSearch('1');
+        }
+
+        // 초기 디렉토리 불러오기
+        browser_command({
+            command: 'list',
+            path: $('#working-directory').prop('value')
+        });
+
+        // 일정 추가 버튼
+        $('#sch-add-btn').on('click', function(e) {
+            e.preventDefault();
+            schedule_modal('new', '');
+        });
+
+        // 일정 업무 선택에 따라 inputs (비)활성화
+        $('#sch-task').change(function() {
+            disabled_by_task($(this).prop('value'));
+        });
+
+        // 일정 방식 선택에 따라 inputs (비)활성화
+        $('input[id^="sch-schedule-mode"][type="radio"]').change(function() {
+            $('#sch-schedule-auto-start').bootstrapToggle('off');
+            disabled_by_schedule_mode($(this).prop('value'));
+        });
+
+        // 일정 저장 버튼
+        $('#sch-save-btn').on('click', function() {
+            id = $(this).data('id');
+            if ($('#sch-task').prop('value') != TASK_KEYS[2] && $('#sch-task').prop('value') != TASK_KEYS[4]){
+                if ($('#sch-target-path').prop('value') == '') {
+                    if ($('#sch-task').prop('value') == TASK_KEYS[6]) {
+                        notify('로컬 경로란에 주기적 스캔 항목의 ID를 입력해 주세요.', 'warning');
+                    } else {
+                        notify('로컬 경로를 입력해 주세요.', 'warning');
+                    }
+                    $('#sch-target-path').focus();
+                    return false;
+                }
+            }
+            if ($('#sch-schedule-mode2').prop('checked') && $('#sch-schedule-interval').prop('value') == '') {
+                notify('시간 간격을 입력해 주세요.', 'warning');
+                $('#sch-schedule-interval').focus();
+                return false;
+            }
+
+            formdata = getFormdata('#sch-setting');
+            formdata += '&id=' + id;
+            globalSendCommand('save', formdata, null, null, function(result) {
+                if (result.success) {
+                    $('#sch-add-modal').modal('hide');
+                    notify(result.data, 'success');
+                    globalRequestSearch(1);
+                } else {
+                    notify(result.data, 'warning');
+                }
+            });
+        });
+
+        // 브라우저 이동 버튼
+        $('#working-directory-submit').on('click', function(e) {
+            dir = $('#working-directory').prop('value');
+            browser_command({command: 'list', path: dir});
+        });
+
+        // 검색 inputs
+        $('#keyword').keypress(function(e) {
+            if (e.keyCode && e.keyCode == 13) {
+                $('#globalSearchSearchBtn').trigger("click");
+                return false;
+            }
+        });
+
+        // 현재 디렉토리
+        $('#working-directory').keypress(function(e) {
+            if (e.keyCode && e.keyCode == 13) {
+                $('#working-directory-submit').trigger("click");
+                return false;
+            }
+        });
+
+    });
+
+</script>
+
+{% endblock %}

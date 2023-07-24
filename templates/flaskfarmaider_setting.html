@@ -1,0 +1,92 @@
+{% extends 'flaskfarmaider.html' %}
+{% block content %}
+
+{{ macros.m_button_group([['globalSettingSaveBtn', '설정 저장']])}}
+{{ macros.m_row_start('5') }}
+{{ macros.m_row_end() }}
+
+<nav>
+{{ macros.m_tab_head_start() }}
+{{ macros.m_tab_head('rcloneremote', 'Rclone Remote', true) }}
+{{ macros.m_tab_head('plexmate', 'Plexmate', false) }}
+{{ macros.m_tab_head('startup', '시작 스크립트', false) }}
+{{ macros.m_tab_head_end() }}
+</nav>
+<form id="setting">
+<div class="tab-content" id="nav-tabContent">
+{{ macros.m_tab_content_start('rcloneremote', true) }}
+    {{ macros.setting_input_text_and_buttons(module_name + '_rclone_remote_addr', 'Rclone Remote 주소 (필수)', [['btn_test_connection_rclone', '접속 확인']], value=args[module_name + '_rclone_remote_addr'], desc=['rclone remote의 주소', 'ex. http://172.17.0.1:5572'], col='8') }}
+    {{ macros.setting_input_text(module_name + '_rclone_remote_vfs', '리모트', args[module_name + '_rclone_remote_vfs'], col='3', desc=['"접속 확인" 성공시 첫번째 vfs가 자동으로 입력됩니다.']) }}
+    {{ macros.m_hr() }}
+    {{ macros.setting_input_text(module_name + '_rclone_remote_user', 'User (선택)', value=args[module_name + '_rclone_remote_user'], col='3', desc=['Remote 접속에 필요한 사용자 이름','--rc-user=username', '사용하지 않을 경우 공백으로 남겨두세요.']) }}
+    {{ macros.m_hr() }}
+    {{ macros.setting_input_text(module_name + '_rclone_remote_pass', 'Pass (선택)', value=args[module_name + '_rclone_remote_pass'], col='3', desc=['Remote 접속에 필요한 비밀번호', '--rc-pass=password', '사용하지 않을 경우 공백으로 남겨두세요.'], type='password') }}
+    {{ macros.m_hr() }}
+    {{ macros.setting_input_textarea(module_name + '_rclone_remote_mapping', '경로 변경 규칙 (필수)', value=args[module_name + '_rclone_remote_mapping'], desc=['로컬 경로를 리모트 경로로 변경할 때 적용할 규칙들', '줄바꿈으로 각 규칙 구분', '', '/변경할/로컬/경로:/변경될/리모트/경로', '', 'ex.', '로컬 경로: /mnt/gds/VOD/1.방송중/드라마', '리모트 경로: VOD/1.방송중/드라마', '로컬 경로에서 /mnt/gds 부분을 삭제해야 하므로', '/mnt/gds:'], col='8', row='5') }}
+{{ macros.m_tab_content_end() }}
+{{ macros.m_tab_content_start('plexmate', false) }}
+    {{ macros.setting_input_text(module_name + '_plexmate_max_scan_time', '최대 스캔 시간', value=args[module_name + '_plexmate_max_scan_time'], col='3', desc=['분 단위', 'Plexmate의 SCANNING 상태가 이 시간을 초과하여 지속될 경우 스캔 실패로 간주합니다.']) }}
+    {{ macros.setting_input_text(module_name + '_plexmate_timeover_range', '타임오버 항목 범위', value=args[module_name + '_plexmate_timeover_range'], col='3', desc=['Plexmate의 TIMEOVER된 항목들 중 이 ID 범위내 항목들을 다시 READY로 변경합니다.', 'ex) 100~110 -> 100, 101, 102 ... 107, 108, 109, 110']) }}
+    {{ macros.setting_input_textarea(module_name + '_plexmate_plex_mapping', 'PLEX 경로 변경 규칙', value=args[module_name + '_plexmate_plex_mapping'], desc=['FF의 경로와 플렉스 경로가 다를 경우 적용할 규칙들', '줄바꿈으로 각 규칙 구분', '', '/변경할/로컬/경로:/변경될/플렉스/경로', '', 'ex.', '로컬 경로: /mnt/gds/VOD/1.방송중/드라마', '플렉스 경로: /gdrive/VOD/1.방송중/드라마', '로컬 경로에서 /mnt/gds 부분을 /gdrive 로 변경해야 하므로', '/mnt/gds:/gdrive'], col='8', row='5') }}
+{{ macros.m_tab_content_end() }}
+{{ macros.m_tab_content_start('startup', false) }}
+    {{ macros.setting_checkbox(module_name + '_startup_executable', '실행 허용', args[module_name + '_startup_executable'], desc=['명령어 실행 허용 여부', '로그에서 실행될 명령어 목록을 보고 실행 여부를 결정하세요.']) }}
+    {{ macros.m_hr() }}
+    {{ macros.setting_input_textarea(module_name + '_startup_commands', '실행할 명령어', value=args[module_name + '_startup_commands'], desc=['간단한 쉘 커맨드를 한 줄씩 입력하세요.', 'ex.', 'apt-get update', 'ls -al /data'], col='12', row='5') }}
+    {{ macros.m_hr() }}
+    {{ macros.setting_input_text(module_name + '_startup_timeout', '명령어 최대 대기 시간', value=args[module_name + '_startup_timeout'], col='3', desc=['초 단위', '각 명령어의 최대 대기시간입니다.']) }}
+    {{ macros.m_hr() }}
+    {{ macros.setting_input_textarea(
+        module_name + '_startup_dependencies',
+        '플러그인 의존성 목록',
+        value=args[module_name + '_startup_dependencies'],
+        desc=[
+        '../data/db/flaskfarmaider.yaml 파일을 수정하거나 여기에 yaml 문법으로 작성해 주세요.',
+        'ex.',
+        '플러그인:',
+        'repo: 플러그인 저장소',
+        'plugins: [필요한 플러그인1, 필요한 플러그인2, ...]',
+        'packages: [필요한 패키지1, 필요한 패키지2, ...]',
+        'commands: [필요한 명령어1, 필요한 명령어2, ...]'
+        ],
+        col='12',
+        row='20'
+    ) }}
+{{ macros.m_tab_content_end() }}
+
+</div>
+</form>
+
+<script type="text/javascript">
+
+    $("body").on('click', '#btn_test_connection_rclone', function (e) {
+        e.preventDefault();
+        ret = globalSendCommand(
+            'command_test_connection',
+            $('#{{ module_name }}_rclone_remote_addr').prop('value').trim(),
+            $('#{{ module_name }}_rclone_remote_user').prop('value').trim(),
+            $('#{{ module_name }}_rclone_remote_pass').prop('value').trim(),
+            callback_test_connection
+        );
+    });
+
+    function callback_test_connection(result) {
+        switch (result.ret) {
+            case 'success':
+                console.log('Connection success');
+                $('#btn_test_connection_rclone').text('접속 성공');
+                //$('#btn_test_connection_rclone').attr('disabled', true);
+                console.log(result.vfses[0]);
+                $("#{{ module_name + '_rclone_remote_vfs' }}").prop('value', result.vfses[0]);
+                break;
+            case 'failed': arguments
+                console.log('Connection failed');
+                $('#btn_test_connection_rclone').text('접속 실패');
+                break;
+            default:
+                console.log('Connection returns : ${result.ret}');
+        }
+    }
+</script>
+
+{% endblock %}

@@ -1,0 +1,27 @@
+{% extends 'base.html' %}
+{% set module_name = args['module_name'] %}
+{% set TASKS = args['tasks'] %}
+{% set TASK_KEYS = args['task_keys'] %}
+{% set STATUSES = args['statuses'] %}
+{% set STATUS_KEYS = args['status_keys'] %}
+{% set FF_SCHEDULE_KEYS = args['ff_schedule_keys'] %}
+{% set FF_SCHEDULES = args['ff_schedules'] %}
+{% set VFS = args['setting_rclone_remote_vfs'] %}
+{% block head %}
+    <meta http-equiv="Permissions-Policy" content="interest-cohort=()">
+    <script type="text/javascript" src="{{ url_for('.static', filename='js/flaskfarmaider.js') }}"></script>
+    <script type="text/javascript">
+        // assign variables
+        var TASKS = JSON.parse('{{ TASKS|tojson }}');
+        var TASK_KEYS = JSON.parse('{{ TASK_KEYS|tojson }}');
+        var STATUSES = JSON.parse('{{ STATUSES|tojson }}');
+        var STATUS_KEYS = JSON.parse('{{ STATUS_KEYS|tojson }}');
+        var FF_SCHEDULE_KEYS = JSON.parse('{{ FF_SCHEDULE_KEYS|tojson }}');
+        var FF_SCHEDULES = JSON.parse('{{ FF_SCHEDULES|tojson }}');
+        var LAST_LIST_OPTIONS = "{{ args[module_name ~ '_last_list_option'] }}".split('|');
+        var VFS = "{{ args['setting_rclone_remote_vfs'] }}";
+    </script>
+    <link rel="stylesheet" href="{{ url_for('.static', filename='css/flaskfarmaider.css') }}" />
+{% endblock %}
+{% block content %}
+{% endblock %}

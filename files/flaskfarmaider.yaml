@@ -1,0 +1,118 @@
+dependencies:
+  sjva:
+    repo: 'https://github.com/soju6jan/sjva'
+  klive_plus:
+    repo: 'https://github.com/soju6jan/klive_plus'
+    plugins:
+      - sjva
+  wv_tool:
+    repo: 'https://github.com/soju6jan/wv_tool'
+    plugins:
+      - sjva
+    packages:
+      - aria2
+      - ffmpeg
+      - mkvtoolnix
+  wavve:
+    repo: 'https://github.com/soju6jan/wavve'
+    plugins:
+      - sjva
+      - ffmpeg
+      - wv_tool
+      - support_site
+  kakaotv:
+    repo: 'https://github.com/soju6jan/kakaotv'
+    plugins:
+      - sjva
+  cppl:
+    repo: 'https://github.com/soju6jan/cppl'
+    plugins:
+      - sjva
+      - support_site
+      - wv_tool
+  bot_downloader:
+    repo: 'https://github.com/soju6jan/bot_downloader'
+    plugins:
+      - sjva
+  gds_tool:
+    repo: 'https://github.com/soju6jan/gds_tool'
+    plugins:
+      - sjva
+  make_yaml:
+    repo: 'https://github.com/kihyyo/make_yaml'
+    plugins:
+      - sjva
+      - support_site
+  flaskfilemanager:
+    repo: 'https://github.com/flaskfarm/flaskfilemanager'
+  terminal:
+    repo: 'https://github.com/flaskfarm/terminal'
+  ffmpeg:
+    repo: 'https://github.com/flaskfarm/ffmpeg'
+    packages:
+      - ffmpeg
+  number_baseball:
+    repo: 'https://github.com/flaskfarm/number_baseball'
+  trans:
+    repo: 'https://github.com/flaskfarm/trans'
+  static_host:
+    repo: 'https://github.com/by275/static_host'
+  rclone:
+    repo: 'https://github.com/flaskfarm/rclone'
+    plugins:
+      - sjva
+      - support_site
+      - wv_tool
+    packages:
+      - fuse3
+      - unzip
+    commands:
+      - 'curl -fsSL "https://raw.githubusercontent.com/wiserain/rclone/mod/install.sh" -o /data/install_rclone.sh'
+      - 'bash /data/install_rclone.sh'
+  support_site:
+    repo: 'https://github.com/flaskfarm/support_site'
+  metadata:
+    repo: 'https://github.com/flaskfarm/metadata'
+    plugins:
+      - support_site
+  discord_bot:
+    repo: 'https://github.com/flaskfarm/discord_bot'
+  libgdrive:
+    repo: 'https://github.com/byorial/libgdrive'
+  fp_ktv:
+    repo: 'https://github.com/flaskfarm/fp_ktv'
+  plex_mate:
+    repo: 'https://github.com/flaskfarm/plex_mate'
+    commands:
+      - 'pip install xmltodict'
+  vnStat:
+    repo: 'https://github.com/by275/vnStat'
+  torrent_info:
+    repo: 'https://github.com/by275/torrent_info'
+    commands:
+      - 'pip install sqlitedict'
+  tving_search:
+    repo: 'https://github.com/by275/tving_search'
+  subtitle_tool:
+    repo: 'https://github.com/flaskfarm/subtitle_tool'
+  fp_movie:
+    repo: 'https://github.com/flaskfarm/fp_movie'
+    plugins:
+      - metadata
+      - support_site
+      - ffmpeg
+      - subtitle_tool
+  hotdeal_alarm:
+    repo: 'https://github.com/dbswnschl/hotdeal_alarm'
+  lotto:
+    repo: 'https://github.com/hudulgi/lotto'
+  musicProc2:
+    repo: 'https://github.com/dyllisLev/musicProc2'
+  sporki:
+    repo: 'https://github.com/105PM/sporki'
+  gugutv:
+    repo: 'https://github.com/ssagajikorea/gugutv'
+  narrtv:
+    repo: 'https://github.com/ssagajikorea/narrtv'
+  cooltv:
+    repo: 'https://github.com/ssagajikorea/cooltv'
