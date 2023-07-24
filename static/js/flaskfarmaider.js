@@ -200,7 +200,7 @@ function make_list(data) {
         col_menu += '" data-schedule_auto_start="' + model.schedule_auto_start
         col_menu += '">메뉴</button></td>'
 
-        row_sub = '<tr id="collapse-' + model.id + '" class="collapse hide" aria-labelledby="list-' + model.id + '" data-parent="#sch-accordion"><td colspan="8"><textarea class="form-control h-50" rows=10>' + model.journal + '</textarea></td></tr>'
+        row_sub = '<tr><td colspan="8"><div id="collapse-' + model.id + '" class="collapse hide" aria-labelledby="list-' + model.id + '" data-parent="#sch-accordion"><textarea class="form-control h-50" rows=10>' + model.journal + '</textarea></div></td></tr>'
         row_group = '<tr id="list-' + model.id + '" class="" role="button" data-toggle="collapse" data-target="#collapse-' + model.id + '" aria-expanded="true" aria-controls="collapse-' + model.id + '">'
         row_group += col_id + col_task + col_interval + col_title + col_switch + col_status + col_ftime + col_menu +'</tr>' + row_sub;
         $('#sch-list-table tbody').append(row_group);
