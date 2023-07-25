@@ -156,6 +156,7 @@ class Schedule(BaseModule):
             elif command == 'delete':
                 if Job.delete_by_id(arg1):
                     result, data = True, f'삭제했습니다: ID {arg1}'
+                    self.set_schedule(arg1, False)
                 else:
                     result, data = False, f'삭제 실패: ID {arg1}'
             elif command == 'execute':
@@ -163,17 +164,8 @@ class Schedule(BaseModule):
                 self.jobaider.handle(job)
                 result, data = True, '실행을 완료했습니다.'
             elif command == 'schedule':
-                schedule_id = Job.create_schedule_id(arg1)
-                flag = True if arg2.lower() == 'true' else False
-                if flag and F.scheduler.is_include(schedule_id):
-                    result, data = False, f'이미 일정에 등록되어 있습니다.'
-                elif flag and not F.scheduler.is_include(schedule_id):
-                    result = self.jobaider.add_schedule(arg1)
-                    data = '일정에 등록했습니다.' if result else '일정에 등록하지 못했어요.'
-                elif not flag and F.scheduler.is_include(schedule_id):
-                    result, data = F.scheduler.remove_job(schedule_id), '일정에서 제외했습니다.'
-                else:
-                    result, data = False, '등록되지 않은 일정입니다.'
+                active = True if arg2.lower() == 'true' else False
+                result, data = self.set_schedule(arg1, active)
             elif command in TASK_KEYS:
                 if arg2:
                     recursive = True if arg2.lower() == 'true' else False
@@ -200,7 +192,21 @@ class Schedule(BaseModule):
         finally:
             return jsonify({'success': result, 'data': data})
 
-    def plugin_load(self):
+    def set_schedule(self, job_id: int | str, active: bool = False) -> tuple[bool, str]:
+        schedule_id = Job.create_schedule_id(int(job_id))
+        is_include = F.scheduler.is_include(schedule_id)
+        if active and is_include:
+            result, data = False, f'이미 일정에 등록되어 있습니다.'
+        elif active and not is_include:
+            result = self.jobaider.add_schedule(job_id)
+            data = '일정에 등록했습니다.' if result else '일정에 등록하지 못했어요.'
+        elif not active and is_include:
+            result, data = F.scheduler.remove_job(schedule_id), '일정에서 제외했습니다.'
+        else:
+            result, data = False, '등록되지 않은 일정입니다.'
+        return result, data
+
+    def plugin_load(self) -> None:
         '''override'''
         models = Job.get_list()
         for model in models:
