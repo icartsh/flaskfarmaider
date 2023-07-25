@@ -8,6 +8,7 @@
 {% set FF_SCHEDULES = args['ff_schedules'] %}
 {% set VFS = args['setting_rclone_remote_vfs'] %}
 {% block head %}
+    <title>{{ get_web_title() }}</title>
     <meta http-equiv="Permissions-Policy" content="interest-cohort=()">
     <script type="text/javascript" src="{{ url_for('.static', filename='js/flaskfarmaider.js') }}"></script>
     <script type="text/javascript">
