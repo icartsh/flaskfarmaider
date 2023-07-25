@@ -186,17 +186,3 @@ Flaskfarm이 시작될 때 실행이 필요한 명령어들을 실행하는 기�
 - Rclone --vfs-case-insensitive 옵션
 
     리눅스 계열 파일 시스템은 기본적으로 경로명의 대소문자를 구분합니다. --vfs-case-insensitive 옵션은 이를 보완하는 개념으로 마운트시 대소문자를 구분하지 않게 해 줍니다. 그런데 구드공처럼 vfs/refresh 로 새로고침을 해야 하는 상황에서는 잘못된 폴더를 새로고침하게 될 수도 있습니다.
-
-    예를 들어...
-
-    ```
-    /path/abc/video_01.mp4
-    ```
-
-    웹 크롤링 결과물 혹은 의도적인 이유로 대소문자만 다른 폴더와 파일이 생성된다면...
-
-    ```
-    /path/aBc/video_02.mp4
-    ```
-
-    /path/aBc 경로가 캐시에 없는 상황인데도 --vfs-case-insensitive 옵션으로 인해 /path/abc 로 대체되어 존재하는 경로로 인식하게 됩니다. 그런데 이 경로에서 video_02.mp4 파일을 찾을 수 없으니 /path/abc 폴더를 vfs/refresh 하게 되죠. 그래서 결국 /path/aBc/video_02.mp4는 수동으로 /path 경로를 vfs/refresh하지 않는 한 캐시되지 않습니다.
