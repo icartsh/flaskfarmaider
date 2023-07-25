@@ -525,7 +525,9 @@ class RcloneAgent(Agent):
             self.logger.debug(f"testing: {test_dirs}")
             already_exists = True if len(test_dirs) < 2 else False
             while test_dirs:
+                # vfs/refresh 후
                 response = self._vfs_refresh(self.get_remote_path(test_dirs[-1]))
+                # 타겟이 존재하는지 점검
                 if os.path.exists(local_path):
                     self.logger.debug(f'EXISTS: {local_path}')
                     # 존재하지 않았던 폴더면 vfs/refresh
@@ -533,7 +535,7 @@ class RcloneAgent(Agent):
                         self.logger.debug(f'is already exists? : {already_exists}')
                         self._vfs_refresh(self.get_remote_path(local_path))
                         # 새로운 폴더를 새로고침 후 한번 더 타겟 경로 존재 점검
-                        if not os.path.exists(local_path): continue
+                        if not os.path.exists(local_path) and len(test_dirs) > 1: continue
                     break
                 else:
                     result, reason = self.is_successful(response)
@@ -541,6 +543,7 @@ class RcloneAgent(Agent):
                         self.logger.error(self.journal(f'can not refresh: {reason}: {test_dirs[-1]}'))
                         break
                     self.logger.debug(f'still not exists...')
+                # 타겟이 아직 존재하지 않으면 다음 상위 경로로 시도
                 test_dirs.pop()
         return response
 
