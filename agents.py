@@ -97,13 +97,13 @@ class Agent:
         '''config: dict = None, name: str = None'''
         self.name = name
         if config: self.set_config(config)
-        if self.config.log.logger is None:
+        if self.config.log.logger:
+            self.logger = self.config.log.logger
+        else:
             self.logger = logging.getLogger(__name__)
             self.logger.setLevel(self.config.log.level)
             self.logger.addHandler(logging.StreamHandler())
             self.config.log.logger = self.logger
-        else:
-            self.logger = self.config.log.logger
         self.operations = {
             'default': self.operation_default
         }
@@ -532,6 +532,8 @@ class RcloneAgent(Agent):
                     if not os.path.isfile(local_path) and not already_exists:
                         self.logger.debug(f'is already exists? : {already_exists}')
                         self._vfs_refresh(self.get_remote_path(local_path))
+                        # 새로운 폴더를 새로고침 후 한번 더 타겟 경로 존재 점검
+                        if not os.path.exists(local_path): continue
                     break
                 else:
                     result, reason = self.is_successful(response)
