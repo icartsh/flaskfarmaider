@@ -55,7 +55,7 @@ class JobAider(Aider):
 
         # start task
         self.run_agent(self, agent, job)
-        P.logger.debug(f'task done...')
+        P.logger.debug(f'job done...')
 
     @F.celery.task
     def run_agent(self, agent: Agent, job: Job | dict[str, Any]) -> None:
