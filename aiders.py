@@ -53,24 +53,17 @@ class JobAider(Aider):
         brief = self.get_agent_brief(target, vfs, recursive, startup_executable)
         agent = self.hire_agent(task, brief)
 
-        @F.celery.task
-        def thread_func(agent: Agent, job: Job | dict[str, Any]) -> None:
-            if isinstance(job, Job): job.set_status(STATUS_KEYS[1])
-            journal = agent.run()
-            if isinstance(job, Job):
-                job.journal = ('\n').join(journal)
-                job.set_status(STATUS_KEYS[2])
         # start task
-        thread_func(agent, job)
+        self.run_agent(agent, job)
         P.logger.debug(f'task done...')
 
-    def schedule_func(self, *args, **kwargs):
-        try:
-            _id = args[0]
-            job = Job.get_by_id(_id)
-            self.handle(job)
-        except Exception as e:
-            P.logger.error(traceback.format_exc())
+    @F.celery.task
+    def run_agent(self, agent: Agent, job: Job | dict[str, Any]) -> None:
+        if isinstance(job, Job): job.set_status(STATUS_KEYS[1])
+        journal = agent.run()
+        if isinstance(job, Job):
+            job.journal = ('\n').join(journal)
+            job.set_status(STATUS_KEYS[2])
 
     def get_agent_brief(self, target: str, vfs: str, recursive: bool, startup_executable: bool) -> dict[str, Any]:
         return {
