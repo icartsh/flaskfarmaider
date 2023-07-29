@@ -145,7 +145,7 @@ class Schedule(BaseModule):
         self.web_list_model = Job
 
     def process_command(self, command: str, arg1: str | None, arg2: str | None, arg3: str | None, request: LocalProxy) -> Response:
-        P.logger.debug(f'process_command: {command}, {arg1}, {arg2}')
+        P.logger.debug(f'process_command: {command}, {arg1}, {arg2}, {arg3}')
         try:
             if command == 'list':
                 dir_list = json.dumps(self.browseraider.get_dir(arg1))
