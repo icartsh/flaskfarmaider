@@ -66,7 +66,7 @@ class JobAider(Aider):
         #        job.set_status(STATUS_KEYS[2])
         # start task
         #thread_func(agent, job)
-        self.thread_func(agent, job)
+        self.thread_func(self, agent, job)
         P.logger.debug(f'task done...')
 
     @F.celery.task
