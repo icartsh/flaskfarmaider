@@ -53,16 +53,24 @@ class JobAider(Aider):
         brief = self.get_agent_brief(target, vfs, recursive, startup_executable)
         agent = self.hire_agent(task, brief)
 
-        self.thread_func(self, agent, job)
+        @F.celery.task
+        def thread_func(agent: Agent, job: Job | dict[str, Any]) -> None:
+            if isinstance(job, Job): job.set_status(STATUS_KEYS[1])
+            journal = agent.run()
+            if isinstance(job, Job):
+                job.journal = ('\n').join(journal)
+                job.set_status(STATUS_KEYS[2])
+        # start task
+        thread_func(agent, job)
         P.logger.debug(f'task done...')
 
-    @F.celery.task
-    def thread_func(self, agent: Agent, job: Job | dict[str, Any]) -> None:
-        if isinstance(job, Job): job.set_status(STATUS_KEYS[1])
-        journal = agent.run()
-        if isinstance(job, Job):
-            job.journal = ('\n').join(journal)
-            job.set_status(STATUS_KEYS[2])
+    def schedule_func(self, *args, **kwargs):
+        try:
+            _id = args[0]
+            job = Job.get_by_id(_id)
+            self.handle(job)
+        except Exception as e:
+            P.logger.error(traceback.format_exc())
 
     def get_agent_brief(self, target: str, vfs: str, recursive: bool, startup_executable: bool) -> dict[str, Any]:
         return {
@@ -169,7 +177,7 @@ class JobAider(Aider):
             model = model if model else Job.get_by_id(id)
             schedule_id = Job.create_schedule_id(model.id)
             if not F.scheduler.is_include(schedule_id):
-                sch = FrameworkJob(__package__, schedule_id, model.schedule_interval, self.handle, model.desc, args=(model))
+                sch = FrameworkJob(__package__, schedule_id, model.schedule_interval, self.handle, model.desc, args=(model,))
                 F.scheduler.add_job_instance(sch)
             return True
         except Exception as e:
