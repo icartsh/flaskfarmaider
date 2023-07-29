@@ -86,7 +86,7 @@ class JobAider(Aider):
             },
             'log': {
                 'logger': P.logger,
-                'level': 'DEBUG'
+                'level': P.logger.level
             },
             'args': {
                 'dirs': [target],
@@ -102,7 +102,7 @@ class JobAider(Aider):
             },
             'ff_config': F.config['config_filepath'],
             'plexmate': {
-                'max_scan_time': P.ModelSetting.get(f'{SETTING}_plexmate_max_scan_time'),
+                'max_scan_time': int(P.ModelSetting.get(f'{SETTING}_plexmate_max_scan_time')),
                 'timeover_range': P.ModelSetting.get(f'{SETTING}_plexmate_timeover_range'),
                 'plex_mapping': self.parse_mappings(P.ModelSetting.get(f'{SETTING}_plexmate_plex_mapping')),
             }
