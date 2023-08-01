@@ -66,7 +66,7 @@ class Setting(BaseModule):
         self.aider = SettingAider()
         self.db_default = {
             f'{self.name}_db_version': '1',
-            f'{self.name}_rclone_remote_addr': 'http://172.17.0.1:5574',
+            f'{self.name}_rclone_remote_addr': 'http://172.17.0.1:5572',
             f'{self.name}_rclone_remote_vfs': '',
             f'{self.name}_rclone_remote_user': '',
             f'{self.name}_rclone_remote_pass': '',
