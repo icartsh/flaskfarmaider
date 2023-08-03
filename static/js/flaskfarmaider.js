@@ -104,7 +104,9 @@ function list_dir(result) {
             path = $(this).data('path');
             cmd = {
                 command: 'list',
-                path: path
+                path: path,
+                recursive: false,
+                scan_mode: SCAN_MODE_KEYS[0],
             }
             browser_command(cmd);
         }
