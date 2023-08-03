@@ -56,7 +56,7 @@ function browser_command(cmd) {
     if (cmd.command != 'list') {
         notify('작업을 실행합니다.', 'success');
     }
-    globalSendCommand(cmd.command, cmd.path, cmd.recursive, cmd.scan_mode + "|", function(result) {
+    globalSendCommand(cmd.command, cmd.path, cmd.recursive, cmd.scan_mode + "|-1", function(result) {
         if (result.success) {
             if (cmd.command == 'list') {
                 E_WORKING_DIR.prop('value', cmd.path);
