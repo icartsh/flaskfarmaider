@@ -372,10 +372,14 @@ function disabled_by_schedule_mode(mode) {
 
 function disabled_by_scan_mode(mode) {
     E_SCAN_PERIODIC_ID.prop('disabled', false);
+    E_TARGET.prop('disabled', false);
     switch(mode) {
         case SCAN_MODE_KEYS[0]:
         case SCAN_MODE_KEYS[2]:
             E_SCAN_PERIODIC_ID.prop('disabled', true);
+            break;
+        case SCAN_MODE_KEYS[1]:
+            E_TARGET.prop('disabled', true);
             break;
     }
 }

@@ -172,8 +172,7 @@ class Agent:
     def run(self) -> list[str]:
         '''None -> None'''
         try:
-            if hasattr(self.config.args, 'command') or self.config.args.command != '':
-                self.logger.debug(self.config.args)
+            if hasattr(self.config.args, 'command') and self.config.args.command != '':
                 self.operate(self.config.args.command)
             else:
                 self.operate('default')
