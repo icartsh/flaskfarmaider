@@ -7,6 +7,8 @@
 {% set FF_SCHEDULE_KEYS = args['ff_schedule_keys'] %}
 {% set FF_SCHEDULES = args['ff_schedules'] %}
 {% set VFS = args['setting_rclone_remote_vfs'] %}
+{% set SCAN_MODE_KEYS = args['scan_mode_keys'] %}
+{% set SCAN_MODES = args['scan_modes'] %}
 {% block head %}
     <title>{{ get_web_title() }}</title>
     <meta http-equiv="Permissions-Policy" content="interest-cohort=()">
@@ -21,6 +23,8 @@
         var FF_SCHEDULES = JSON.parse('{{ FF_SCHEDULES|tojson }}');
         var LAST_LIST_OPTIONS = "{{ args[module_name ~ '_last_list_option'] }}".split('|');
         var VFS = "{{ args['setting_rclone_remote_vfs'] }}";
+        var SCAN_MODES = JSON.parse('{{ SCAN_MODES|tojson }}');
+        var SCAN_MODE_KEYS = JSON.parse('{{ SCAN_MODE_KEYS|tojson }}');
     </script>
     <link rel="stylesheet" href="{{ url_for('.static', filename='css/flaskfarmaider.css') }}" />
 {% endblock %}

@@ -172,7 +172,8 @@ class Agent:
     def run(self) -> list[str]:
         '''None -> None'''
         try:
-            if hasattr(self.config.args, 'command'):
+            if hasattr(self.config.args, 'command') or self.config.args.command != '':
+                self.logger.debug(self.config.args)
                 self.operate(self.config.args.command)
             else:
                 self.operate('default')
@@ -220,6 +221,7 @@ class PlexmateAgent(PluginAgent):
                 'periodic': self.operation_periodic,
                 'scan_web': self.operation_scan_web,
                 'refresh_web': self.operation_refresh_web,
+                'scan_periodic': self.operation_periodic,
             }
         )
 
@@ -419,30 +421,33 @@ class PlexmateAgent(PluginAgent):
     def operation_periodic(self):
         '''None -> None'''
         '''
-        plexmate periodic {job id} [--fs remote_name:] [--recursive]
+        plexmate periodic {periodic_id} [--fs remote_name:] [--recursive]
         주기적 스캔의 작업 ID 를 입력받아 vfs/refresh를 한 뒤 주기적 스캔을 실행
         '''
         mod = self.get_module('periodic')
-        if hasattr(self.config.args, 'job_id'):
-            job_id = int(self.config.args.job_id) - 1
+        if hasattr(self.config.args, 'periodic_id'):
+            periodic_id = int(self.config.args.periodic_id) - 1
         else:
-            job_id = None
+            periodic_id = None
         try:
-            job = mod.get_jobs()[job_id]
+            job = mod.get_jobs()[periodic_id]
         except IndexError as e:
             self.logger.error(self.journal(str(e)))
             job = None
         if job:
-            if job.get('폴더'):
-                self.targets = list(job.get('폴더'))
+            if self.config.args.command == 'scan_periodic':
+                mod.one_execute(periodic_id)
             else:
-                self.targets = self.get_locations_by_id(job.get('섹션ID'))
-            if self.targets:
-                [t for t, _ in self.rclone_refresh(self.targets)]
-                self.logger.info(self.journal(f'주기적 스캔 실행: {job}'))
-                mod.one_execute(job_id)
-            else:
-                self.logger.info(self.journal('새로고침 대상이 없어요.'))
+                if job.get('폴더'):
+                    self.targets = list(job.get('폴더'))
+                else:
+                    self.targets = self.get_locations_by_id(job.get('섹션ID'))
+                if self.targets:
+                    [t for t, _ in self.rclone_refresh(self.targets)]
+                    self.logger.info(self.journal(f'주기적 스캔 실행: {job}'))
+                    mod.one_execute(periodic_id)
+                else:
+                    self.logger.info(self.journal('새로고침 대상이 없어요.'))
         else:
             self.logger.error(self.journal('주기적 스캔 작업을 찾을 수 없어요.'))
 
@@ -910,7 +915,7 @@ def parse_args(args):
         'periodic',
         help='주기적 스캔의 작업 ID를 입력하여 vfs/refresh 후 해당 작업을 실행합니다'
     )
-    parser_plexmate_periodic.add_argument('job_id', type=int, metavar='{JOB_ID}')
+    parser_plexmate_periodic.add_argument('periodic_id', type=int, metavar='{PERIODIC_ID}')
     parser_plexmate_periodic.add_argument(arg_fs[0], **arg_fs[1])
     parser_plexmate_periodic.add_argument(arg_recursive[0], **arg_recursive[1])
 

@@ -13,7 +13,7 @@ import requests
 from framework.scheduler import Job as FrameworkJob # type: ignore
 
 from .setup import P, F, SETTING
-from .models import Job, TASKS, TASK_KEYS, STATUS_KEYS, FF_SCHEDULE_KEYS
+from .models import Job, TASKS, TASK_KEYS, STATUS_KEYS, FF_SCHEDULE_KEYS, SCAN_MODE_KEYS
 from .agents import Agent, RcloneAgent, PlexmateAgent, UbuntuAgent
 
 
@@ -42,15 +42,25 @@ class JobAider(Aider):
         super().__init__()
 
     def handle(self, job: Job | dict[str, Any]):
-        task = job.task if isinstance(job, Job) else job['task']
-        target = job.target if isinstance(job, Job) else job['target']
-        recursive = job.recursive if isinstance(job, Job) else job['recursive']
-        vfs = job.vfs if isinstance(job, Job) else P.ModelSetting.get(f'{SETTING}_rclone_remote_vfs')
+        if isinstance(job, Job):
+            task = job.task
+            target = job.target
+            recursive = job.recursive
+            vfs = job.vfs
+            scan_mode = job.scan_mode
+            periodic_id = job.periodic_id
+        else:
+            task = job.get('task')
+            target = job.get('target')
+            recursive = job.get('recursive')
+            vfs = P.ModelSetting.get(f'{SETTING}_rclone_remote_vfs')
+            scan_mode = job.get('scan_mode')
+            periodic_id = job.get('periodic_id')
 
         startup_executable = P.ModelSetting.get(f'{SETTING}_startup_executable')
         startup_executable = True if startup_executable.lower() == 'true' else False
 
-        brief = self.get_agent_brief(target, vfs, recursive, startup_executable)
+        brief = self.get_agent_brief(target, vfs, recursive, scan_mode, periodic_id, startup_executable)
         agent = self.hire_agent(task, brief)
 
         # start task
@@ -65,7 +75,7 @@ class JobAider(Aider):
             job.journal = ('\n').join(journal)
             job.set_status(STATUS_KEYS[2])
 
-    def get_agent_brief(self, target: str, vfs: str, recursive: bool, startup_executable: bool) -> dict[str, Any]:
+    def get_agent_brief(self, target: str, vfs: str, recursive: bool, scan_mode: str, periodic_id: int, startup_executable: bool) -> dict[str, Any]:
         return {
             'rclone': {
                 'rc_addr': P.ModelSetting.get(f'{SETTING}_rclone_remote_addr'),
@@ -81,7 +91,9 @@ class JobAider(Aider):
                 'dirs': [target],
                 'fs': vfs,
                 'recursive': recursive,
-                'job_id': target,
+                'periodic_id': periodic_id,
+                'scan_mode': scan_mode,
+                'command': '',
             },
             'init': {
                 'execute_commands': startup_executable,
@@ -98,59 +110,64 @@ class JobAider(Aider):
         }
 
     def hire_agent(self, task: str, brief: dict[str, Any]):
-        # task route
         if task == TASK_KEYS[0]:
-            brief['args']['command'] = 'vfs/refresh'
-            agent = RcloneAgent(brief)
+            if brief['args']['scan_mode'] == SCAN_MODE_KEYS[0]:
+                brief['args']['command'] = 'refresh'
+            elif brief['args']['scan_mode'] == SCAN_MODE_KEYS[1]:
+                brief['args']['command'] = 'periodic'
+            elif brief['args']['scan_mode'] == SCAN_MODE_KEYS[2]:
+                brief['args']['command'] = 'refresh_web'
         elif task == TASK_KEYS[1]:
-            brief['args']['command'] = 'scan_web'
-            agent = PlexmateAgent(brief)
+            brief['args']['command'] = 'vfs/refresh'
         elif task == TASK_KEYS[2]:
-            agent = UbuntuAgent(brief)
+            if brief['args']['scan_mode'] == SCAN_MODE_KEYS[0]:
+                brief['args']['command'] = 'scan'
+            elif brief['args']['scan_mode'] == SCAN_MODE_KEYS[1]:
+                brief['args']['command'] = 'scan_periodic'
+            elif brief['args']['scan_mode'] == SCAN_MODE_KEYS[2]:
+                brief['args']['command'] = 'scan_web'
         elif task == TASK_KEYS[3]:
-            brief['args']['command'] = 'scan'
-            agent = PlexmateAgent(brief)
+            brief['args']['command'] = ''
+        elif task == TASK_KEYS[4]:
+            brief['args']['command'] = 'clear'
+
+        if task == TASK_KEYS[1]:
+            agent = RcloneAgent(brief)
         elif task == TASK_KEYS[5]:
-            brief['args']['command'] = 'refresh'
-            agent = PlexmateAgent(brief)
-        elif task == TASK_KEYS[6]:
-            brief['args']['command'] = 'periodic'
-            agent = PlexmateAgent(brief)
-        elif task == TASK_KEYS[7]:
-            brief['args']['command'] = 'refresh_web'
-            agent = PlexmateAgent(brief)
+            agent = UbuntuAgent(brief)
         else:
             agent = PlexmateAgent(brief)
+
         return agent
 
     def update(self, formdata: dict[str, list]) -> tuple[bool, str]:
         try:
             _id = int(formdata.get('id')[0]) if formdata.get('id') else -1
             task = formdata.get('sch-task')[0] if formdata.get('sch-task') else TASK_KEYS[0]
-            schedule_mode = formdata.get('sch-schedule-mode')[0] if formdata.get('sch-schedule-mode') else FF_SCHEDULE_KEYS[0]
             if _id == -1:
-                model = Job(task, schedule_mode)
+                model = Job(task)
                 model.save()
             else:
                 model = Job.get_by_id(_id)
-                model.schedule_mode = schedule_mode
                 model.task = task
             desc = formdata.get('sch-description')[0] if formdata.get('sch-description') else ''
             model.desc = desc if desc != '' else f'{TASKS[model.task]["name"]}'
-            model.commands = formdata.get('sch-commands')[0] if formdata.get('sch-commands') else ''
+            model.schedule_mode = formdata.get('sch-schedule-mode')[0] if formdata.get('sch-schedule-mode') else FF_SCHEDULE_KEYS[0]
             model.schedule_interval = formdata.get('sch-schedule-interval')[0] if formdata.get('sch-schedule-interval') else '60'
-            if task == TASK_KEYS[2]:
+            if task == TASK_KEYS[5]:
                 model.target = '시작시 설정의 커맨드를 실행'
                 model.schedule_interval = '매 시작'
-            elif task == TASK_KEYS[4]:
+            elif task == TASK_KEYS[3]:
                 model.target = 'Plexmate의 READY 항목을 새로고침'
             else :
                 model.target = formdata.get('sch-target-path')[0] if formdata.get('sch-target-path') else '/'
-            model.vfs = formdata.get('sch-vfs', 'remote:')[0] if formdata.get('sch-vfs', 'remote:') else ''
+            model.vfs = formdata.get('sch-vfs')[0] if formdata.get('sch-vfs') else 'remote:'
             recursive = formdata.get('sch-recursive')[0] if formdata.get('sch-recursive') else 'false'
             model.recursive = True if recursive.lower() == 'true' else False
             schedule_auto_start = formdata.get('sch-schedule-auto-start')[0] if formdata.get('sch-schedule-auto-start') else 'false'
             model.schedule_auto_start = True if schedule_auto_start.lower() == 'true' else False
+            model.scan_mode = formdata.get('sch-scan-mode')[0] if formdata.get('sch-scan-mode') else SCAN_MODE_KEYS[0]
+            model.periodic_id = int(formdata.get('sch-scan-mode-periodic-id')[0]) if formdata.get('sch-scan-mode-periodic-id') else -1
             model.save()
 
             if model.id:

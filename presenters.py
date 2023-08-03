@@ -10,7 +10,7 @@ from plugin.create_plugin import PluginBase # type: ignore
 from plugin.logic_module_base import PluginModuleBase # type: ignore
 
 from .setup import F, P, SETTING, SCHEDULE
-from .models import Job, TASK_KEYS, TASKS, STATUS_KEYS, STATUSES, FF_SCHEDULE_KEYS, FF_SCHEDULES
+from .models import Job, TASK_KEYS, TASKS, STATUS_KEYS, STATUSES, FF_SCHEDULE_KEYS, FF_SCHEDULES, SCAN_MODE_KEYS, SCAN_MODES
 from .aiders import BrowserAider, SettingAider, JobAider
 
 
@@ -51,6 +51,8 @@ class BaseModule(PluginModuleBase):
             args['status_keys'] = STATUS_KEYS
             args['ff_schedule_keys'] = FF_SCHEDULE_KEYS
             args['ff_schedules'] = FF_SCHEDULES
+            args['scan_mode_keys'] = SCAN_MODE_KEYS
+            args['scan_modes'] = SCAN_MODES
             return render_template(f'{__package__}_{self.name}.html', args=args)
         except Exception as e:
             P.logger.error(f'Exception:{str(e)}')
@@ -65,7 +67,7 @@ class Setting(BaseModule):
         super().__init__(P, name=SETTING)
         self.aider = SettingAider()
         self.db_default = {
-            f'{self.name}_db_version': '1',
+            f'{self.name}_db_version': '2',
             f'{self.name}_rclone_remote_addr': 'http://172.17.0.1:5572',
             f'{self.name}_rclone_remote_vfs': '',
             f'{self.name}_rclone_remote_user': '',
@@ -80,27 +82,107 @@ class Setting(BaseModule):
             f'{self.name}_startup_dependencies': SettingAider.depends(),
         }
 
-    """
     def migration(self):
         '''override'''
         try:
+            import sqlite3
             with F.app.app_context():
-                import sqlite3
                 db_file = F.app.config['SQLALCHEMY_BINDS'][P.package_name].replace('sqlite:///', '').split('?')[0]
-                P.logger.debug(db_file)
-                if P.ModelSetting.get(f'{self.name}_db_version') == '1':
-                    P.logger.debug('migration!!!!!!!!!!!!')
+                current_db_ver = P.ModelSetting.get(f'{self.name}_db_version')
+                P.logger.debug(f'current db version: {current_db_ver}')
+                if current_db_ver == '1':
+                    P.logger.debug('start migration from 1 to 2...')
                     connection = sqlite3.connect(db_file)
-                    cursor = connection.cursor()
-                    query = f'ALTER TABLE task ADD vfs VARCHAR'
-                    cursor.execute(query)
+                    connection.row_factory = sqlite3.Row
+                    cs = connection.cursor()
+
+                    table_jobs = f'{__package__}_jobs'
+
+                    # check old table
+                    old_table_rows = cs.execute(f"SELECT count(*) FROM sqlite_master WHERE type='table' AND name='job'").fetchall()
+                    if old_table_rows[0]['count(*)']:
+                        P.logger.debug('old table exists!')
+                        cs.execute(f'ALTER TABLE "job" RENAME TO "job_OLD_TABLE"').fetchall()
+                        new_table_rows = cs.execute(f"SELECT count(*) FROM sqlite_master WHERE type='table' AND name='{table_jobs}'").fetchall()
+                        if new_table_rows[0]['count(*)']:
+                            # drop new blank table
+                            P.logger.debug('new blank table exists!')
+                            cs.execute(f'DROP TABLE {table_jobs}').fetchall()
+                        # rename table
+                        cs.execute(f'ALTER TABLE "job_OLD_TABLE" RENAME TO "{table_jobs}"').fetchall()
+
+                        # add/drop columns
+                        rows = cs.execute(f'SELECT name FROM pragma_table_info("{table_jobs}")').fetchall()
+                        cols = [row['name'] for row in rows]
+                        if 'commands' in cols:
+                            cs.execute(f'ALTER TABLE "{table_jobs}" DROP COLUMN "commands"').fetchall()
+                        if 'scan_mode' not in cols:
+                            cs.execute(f'ALTER TABLE "{table_jobs}" ADD COLUMN "scan_mode" VARCHAR').fetchall()
+                        if 'periodic_id' not in cols:
+                            cs.execute(f'ALTER TABLE "{table_jobs}" ADD COLUMN "periodic_id" INTEGER').fetchall()
+
+                        # check before seting values
+                        rows = cs.execute(f'SELECT name FROM pragma_table_info("{table_jobs}")').fetchall()
+                        cols = [row['name'] for row in rows]
+                        P.logger.debug(f'table cols: {cols}')
+                        rows = cs.execute(f'SELECT * FROM "{table_jobs}"').fetchall()
+                        for row in rows:
+                            P.logger.debug(f"{row['id']} | {row['ctime']} | {row['task']} | {row['desc']} | {row['target']} | {row['scan_mode']} | {row['periodic_id']}")
+
+                        P.logger.debug('========== set values ==========')
+
+                        # set values
+                        rows = cs.execute(f'SELECT * FROM "{table_jobs}"').fetchall()
+                        for row in rows:
+                            if not row['scan_mode']:
+                                cs.execute(f'UPDATE {table_jobs} SET scan_mode = "plexmate" WHERE id = {row["id"]}').fetchall()
+                            if not row['periodic_id']:
+                                cs.execute(f'UPDATE {table_jobs} SET periodic_id = -1 WHERE id = {row["id"]}').fetchall()
+
+                            if row['task'] == 'refresh':
+                                pass
+                            elif row['task'] == 'scan':
+                                # Plex Web API로 스캔 요청
+                                cs.execute(f'UPDATE {table_jobs} SET scan_mode = "web" WHERE id = {row["id"]}').fetchall()
+                            elif row['task'] == 'startup':
+                                pass
+                            elif row['task'] == 'pm_scan':
+                                # Plexmate로 스캔 요청
+                                cs.execute(f'UPDATE {table_jobs} SET task = "scan" WHERE id = {row["id"]}').fetchall()
+                            elif row['task'] == 'pm_ready_refresh':
+                                # Plexmate Ready 새로고침
+                                pass
+                            elif row['task'] == 'refresh_pm_scan':
+                                # 새로고침 후 Plexmate 스캔
+                                cs.execute(f'UPDATE {table_jobs} SET task = "refresh_scan" WHERE id = {row["id"]}').fetchall()
+                                pass
+                            elif row['task'] == 'refresh_pm_periodic':
+                                # 새로고침 후 주기적 스캔
+                                cs.execute(f'UPDATE {table_jobs} SET task = "refresh_scan" WHERE id = {row["id"]}').fetchall()
+                                cs.execute(f'UPDATE {table_jobs} SET scan_mode = "periodic" WHERE id = {row["id"]}').fetchall()
+                                cs.execute(f'UPDATE {table_jobs} SET periodic_id = {int(row["target"])} WHERE id = {row["id"]}').fetchall()
+                                cs.execute(f'UPDATE {table_jobs} SET target = "" WHERE id = {row["id"]}').fetchall()
+                            elif row['task'] == 'refresh_scan':
+                                # 새로고침 후 웹 스캔
+                                cs.execute(f'UPDATE {table_jobs} SET scan_mode = "web" WHERE id = {row["id"]}').fetchall()
+
+                        # final check
+                        rows = cs.execute(f'SELECT * FROM "{table_jobs}"').fetchall()
+                        for row in rows:
+                            P.logger.debug(f"{row['id']} | {row['ctime']} | {row['task']} | {row['desc']} | {row['target']} | {row['scan_mode']} | {row['periodic_id']}")
+                            #print(dict(row))
+                            if not row['task'] in TASK_KEYS:
+                                P.logger.error(f'wrong task: {row["task"]}')
+                            if not row['scan_mode'] in SCAN_MODE_KEYS:
+                                P.logger.error(f'wrong scan_mode: {row["scan_mode"]}')
+                        connection.commit()
+
                     connection.close()
                     P.ModelSetting.set(f'{self.name}_db_version', '2')
                     F.db.session.flush()
         except Exception as e:
             P.logger.error(f'Exception:{str(e)}')
             P.logger.error(traceback.format_exc())
-    """
 
     def process_command(self, command: str, arg1: str, arg2: str, arg3: str, req: LocalProxy) -> Response:
         '''ovverride'''
@@ -171,13 +253,19 @@ class Schedule(BaseModule):
                     recursive = True if arg2.lower() == 'true' else False
                 else:
                     recursive = False
+                if arg3:
+                    scan_mode, periodic_id = arg3.split('|')
+                else:
+                    scan_mode = SCAN_MODE_KEYS[0]
+                    periodic_id = '-1'
 
                 if arg1:
                     job = {
                         'task': command,
                         'target': arg1,
-                        'commands': arg3,
                         'recursive': recursive,
+                        'scan_mode': scan_mode,
+                        'periodic_id': int(periodic_id) if periodic_id else -1,
                     }
                     P.logger.debug(f'process_command: {job}')
                     self.jobaider.handle(job)

@@ -11,16 +11,14 @@ from plugin.model_base import ModelBase # type: ignore
 from .setup import P, F, SCHEDULE
 
 
-TASK_KEYS = ('refresh', 'scan', 'startup', 'pm_scan', 'pm_ready_refresh', 'refresh_pm_scan', 'refresh_pm_periodic', 'refresh_scan')
+TASK_KEYS = ('refresh_scan', 'refresh', 'scan', 'pm_ready_refresh', 'clear', 'startup')
 TASKS = {
-    TASK_KEYS[0]: {'key': TASK_KEYS[0], 'name': '새로고침', 'desc': 'Rclone 리모트 콘트롤 서버에 vfs/refresh 요청', 'enable': False},
-    TASK_KEYS[1]: {'key': TASK_KEYS[1], 'name': '스캔', 'desc': 'Plex Web API로 스캔 요청', 'enable': False},
-    TASK_KEYS[2]: {'key': TASK_KEYS[2], 'name': '시작 스크립트', 'desc': 'Flaskfarm 시작시 필요한 OS 명령어를 실행', 'enable': False},
-    TASK_KEYS[3]: {'key': TASK_KEYS[3], 'name': 'Plexmate 스캔', 'desc': 'Plexmate로 스캔 요청', 'enable': False},
-    TASK_KEYS[4]: {'key': TASK_KEYS[4], 'name': 'Plexmate Ready 새로고침', 'desc': 'Plexmate의 READY 상태인 항목을 Rclone 리모트 콘트롤 서버에 vfs/refresh 요청', 'enable': False},
-    TASK_KEYS[5]: {'key': TASK_KEYS[5], 'name': '새로고침 후 Plexmate 스캔', 'desc': 'Rclone 리모트 콘트롤 서버에 vfs/refresh 요청 후 Plexmate에 스캔 요청', 'enable': False},
-    TASK_KEYS[6]: {'key': TASK_KEYS[6], 'name': '새로고침 후 주기적 스캔', 'desc': 'Rclone 리모트 콘트롤 서버에 vfs/refresh 요청 후 Plexmate의 주기적 스캔 작업 실행', 'enable': False},
-    TASK_KEYS[7]: {'key': TASK_KEYS[7], 'name': '새로고침 후 스캔', 'desc': 'Rclone 리모트 콘트롤 서버에 vfs/refresh 요청 후 Plex Web API로 스캔 요청', 'enable': False},
+    TASK_KEYS[0]: {'key': TASK_KEYS[0], 'name': '새로고침 후 스캔', 'desc': 'Rclone 리모트 콘트롤 서버에 vfs/refresh 요청 후 플렉스 스캔', 'enable': False},
+    TASK_KEYS[1]: {'key': TASK_KEYS[1], 'name': '새로고침', 'desc': 'Rclone 리모트 콘트롤 서버에 vfs/refresh 요청', 'enable': False},
+    TASK_KEYS[2]: {'key': TASK_KEYS[2], 'name': '스캔', 'desc': '플렉스 스캔을 요청', 'enable': False},
+    TASK_KEYS[3]: {'key': TASK_KEYS[3], 'name': 'Plexmate Ready 새로고침', 'desc': 'Plexmate의 READY 상태인 항목들을 Rclone 리모트 서버에 vfs/refresh 요청', 'enable': False},
+    TASK_KEYS[4]: {'key': TASK_KEYS[4], 'name': 'Plexmate 파일정리(미구현)', 'desc': 'Plexmate의 파일정리를 일정으로 등록', 'enable': False},
+    TASK_KEYS[5]: {'key': TASK_KEYS[5], 'name': '시작 스크립트', 'desc': 'Flaskfarm 시작시 필요한 OS 명령어를 실행', 'enable': False},
 }
 
 STATUS_KEYS = ('ready', 'running', 'finish')
@@ -37,11 +35,18 @@ FF_SCHEDULES = {
     FF_SCHEDULE_KEYS[2]: {'key': FF_SCHEDULE_KEYS[2], 'name': '시간 간격', 'desc': None},
 }
 
+SCAN_MODE_KEYS = ('plexmate', 'periodic', 'web')
+SCAN_MODES = {
+    SCAN_MODE_KEYS[0]: {'key': SCAN_MODE_KEYS[0], 'name': 'Plexmate 스캔', 'desc': None},
+    SCAN_MODE_KEYS[1]: {'key': SCAN_MODE_KEYS[1], 'name': '주기적 스캔', 'desc': None},
+    SCAN_MODE_KEYS[2]: {'key': SCAN_MODE_KEYS[2], 'name': 'Plex Web API', 'desc': None},
+}
+
 
 class Job(ModelBase):
 
     P = P
-    __tablename__ = 'job'
+    __tablename__ = f'{__package__}_jobs'
     __table_args__ = {'mysql_collate': 'utf8_general_ci'}
     __bind_key__ = P.package_name
 
@@ -53,16 +58,17 @@ class Job(ModelBase):
     task = F.db.Column(F.db.String)
     recursive = F.db.Column(F.db.Boolean)
     vfs = F.db.Column(F.db.String)
-    commands = F.db.Column(F.db.String)
     schedule_mode = F.db.Column(F.db.String)
     schedule_interval = F.db.Column(F.db.String)
     schedule_auto_start = F.db.Column(F.db.Boolean)
     status = F.db.Column(F.db.String)
     journal = F.db.Column(F.db.Text)
+    scan_mode = F.db.Column(F.db.String)
+    periodic_id = F.db.Column(F.db.Integer)
 
     def __init__(self, task: str, schedule_mode: str = FF_SCHEDULE_KEYS[0], schedule_auto_start: bool = False,
-                 desc: str = None, target: str = None, recursive: bool = False,
-                 vfs: str = None, commands: str = None):
+                 desc: str = '', target: str = '', recursive: bool = False,
+                 vfs: str = '', scan_mode: str = SCAN_MODE_KEYS[0], periodic_id: int = -1):
         self.ctime = datetime.now()
         self.ftime = datetime(1970, 1, 1)
         self.task = task
@@ -72,8 +78,9 @@ class Job(ModelBase):
         self.target = target
         self.recursive = recursive
         self.vfs = vfs
-        self.commands = commands
         self.status = STATUS_KEYS[0]
+        self.scan_mode = scan_mode
+        self.periodic_id = periodic_id
 
     @classmethod
     def make_query(cls, request: LocalProxy, order: str ='desc', search: str = '', option1: str = 'all', option2: str = 'all') -> Query:
