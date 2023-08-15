@@ -616,38 +616,31 @@ class RcloneAgent(Agent):
         print(self.command('vfs/list').text)
 
 
-class InitAgent(Agent):
+class InitAgent(PluginAgent):
 
-    plugins_indtalled = None
+    plugins_installed = None
     plugins_dir = None
 
     def __init__(self, config, name=None):
         '''config: dict, name: str = None'''
         super().__init__(config, name=name)
-        try:
-            with open(self.config.ff_config, 'r') as stream:
-                self.config['ff_config'] = yaml.safe_load(stream)
-                self.plugins_dir = f'{self.config.ff_config.path_data}/plugins'
-            self.plugins_indtalled = self.get_installed_plugins()
-        except FileNotFoundError as fnfe:
-            self.logger.error(self.journal(str(fnfe)))
-            self.plugins_indtalled = {}
+        self.plugins_installed = self.F.PluginManager.get_plugin_name_list()
 
     def get_installed_plugins(self):
         '''None -> dict[str, dict]'''
-        plugins_indtalled = {}
+        plugins_installed = {}
         for dir in os.listdir(self.plugins_dir):
             try:
                 info_file = f'{self.plugins_dir}/{dir}/info.yaml'
                 with open(info_file, "r") as stream:
                     try:
-                        plugins_indtalled[dir] = yaml.safe_load(stream)
+                        plugins_installed[dir] = yaml.safe_load(stream)
                     except yaml.YAMLError as ye:
                         self.logger.error(self.journal(str(ye)))
             except FileNotFoundError as fnfe:
                 self.logger.error(self.journal(f'{fnfe}: {info_file}'))
                 continue
-        return plugins_indtalled
+        return plugins_installed
 
     def check_command(self, *args):
         '''args: tuple[str] -> bool'''
@@ -717,7 +710,7 @@ class UbuntuAgent(InitAgent):
         require_commands = set()
 
         # plugin by plugin
-        for plugin, info in self.plugins_indtalled.items():
+        for plugin in self.plugins_installed:
            # append this plugin's requires to
             depend_plugins = self.config.init.dependencies.get(plugin, {}).get('plugins', [])
             for depend in depend_plugins:
@@ -742,7 +735,7 @@ class UbuntuAgent(InitAgent):
                 require_commands.add(depend)
 
         # pop installed plugins
-        for plugin in self.plugins_indtalled.keys():
+        for plugin in self.plugins_installed:
             require_plugins.discard(plugin)
 
         executable_commands = []
@@ -765,8 +758,7 @@ class UbuntuAgent(InitAgent):
         # 4. Commands of installing required plugins
         if require_plugins:
             for plugin in require_plugins:
-                command = f'git clone {self.config.init.dependencies.get(plugin, {"repo": "NO INFO."}).get("repo")} {self.plugins_dir}/{plugin}'
-                executable_commands.append(command)
+                self.logger.info(self.journal(f'설치 예정 플러그인: {plugin}'))
 
         for command in executable_commands:
             self.logger.info(self.journal(f'실행 예정 명령어: {command}'))
@@ -781,6 +773,10 @@ class UbuntuAgent(InitAgent):
                 else:
                     msg = result.stdout
                 self.logger.info(self.journal(f'실행 결과 {command}: {msg}'))
+
+            for plugin in require_plugins:
+                result = self.F.PluginManager.plugin_install(self.config.init.dependencies.get(plugin, {"repo": "NO INFO."}).get("repo"))
+                self.logger.info(result.get('msg'))
         else:
             self.logger.error(self.journal(f'실행이 허용되지 않도록 설정되어 있어요.'))
 

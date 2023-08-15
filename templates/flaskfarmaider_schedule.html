@@ -179,6 +179,7 @@
         // 일정 저장 버튼
         $('#sch-save-btn').on('click', function() {
             id = $(this).data('id');
+            /*
             if ($('#sch-task').prop('value') != TASK_KEYS[2] && $('#sch-task').prop('value') != TASK_KEYS[4]){
                 if ($('#sch-target-path').prop('value') == '') {
                     if ($('#sch-task').prop('value') == TASK_KEYS[6]) {
@@ -190,9 +191,10 @@
                     return false;
                 }
             }
-            if ($('#sch-schedule-mode2').prop('checked') && $('#sch-schedule-interval').prop('value') == '') {
+            */
+            if (E_SCH_RADIO_2.prop('checked') && E_INTERVAL.prop('value') == '') {
                 notify('시간 간격을 입력해 주세요.', 'warning');
-                $('#sch-schedule-interval').focus();
+                E_INTERVAL.focus();
                 return false;
             }
 
