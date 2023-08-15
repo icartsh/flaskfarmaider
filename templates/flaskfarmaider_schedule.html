@@ -136,10 +136,10 @@
         // 초기 일정 불러오기
         // f'{order}|{page}|{search}|{option1}|{option2}')
         if (LAST_LIST_OPTIONS.length == 5) {
-            $('#order').prop('value', LAST_LIST_OPTIONS[0]);
-            $('#keyword').prop('value', LAST_LIST_OPTIONS[2]);
-            $('#option1').prop('value', LAST_LIST_OPTIONS[3]);
-            $('#option2').prop('value', LAST_LIST_OPTIONS[4]);
+            E_GLOBAL_SEARCH_ORDER.prop('value', LAST_LIST_OPTIONS[0]);
+            E_GLOBAL_SEARCH_KEYWORD.prop('value', LAST_LIST_OPTIONS[2]);
+            E_GLOBAL_SEARCH_OPTION1.prop('value', LAST_LIST_OPTIONS[3]);
+            E_GLOBAL_SEARCH_OPTION2.prop('value', LAST_LIST_OPTIONS[4]);
             globalRequestSearch(LAST_LIST_OPTIONS[1]);
         } else {
             globalRequestSearch('1');
@@ -148,25 +148,25 @@
         // 초기 디렉토리 불러오기
         browser_command({
             command: 'list',
-            path: $('#working-directory').prop('value'),
+            path: E_BROWSER_WD.prop('value'),
             recursive: false,
             scan_mode: SCAN_MODE_KEYS[0],
         });
 
         // 일정 추가 버튼
-        $('#sch-add-btn').on('click', function(e) {
+        E_ADD_BTN.on('click', function(e) {
             e.preventDefault();
             schedule_modal('new', '');
         });
 
         // 일정 업무 선택에 따라 inputs (비)활성화
-        $('#sch-task').change(function() {
+        E_TASK.change(function() {
             disabled_by_task($(this).prop('value'));
         });
 
         // 일정 방식 선택에 따라 inputs (비)활성화
         $('input[id^="sch-schedule-mode"][type="radio"]').change(function() {
-            $('#sch-schedule-auto-start').bootstrapToggle('off');
+            E_SCH_AUTO.bootstrapToggle('off');
             disabled_by_schedule_mode($(this).prop('value'));
         });
 
@@ -177,7 +177,7 @@
 
 
         // 일정 저장 버튼
-        $('#sch-save-btn').on('click', function() {
+        E_SAVE_BTN.on('click', function() {
             id = $(this).data('id');
             /*
             if ($('#sch-task').prop('value') != TASK_KEYS[2] && $('#sch-task').prop('value') != TASK_KEYS[4]){
@@ -202,7 +202,7 @@
             formdata += '&id=' + id;
             globalSendCommand('save', formdata, null, null, function(result) {
                 if (result.success) {
-                    $('#sch-add-modal').modal('hide');
+                    E_MODAL.modal('hide');
                     notify(result.data, 'success');
                     globalRequestSearch(1);
                 } else {
@@ -212,23 +212,23 @@
         });
 
         // 브라우저 이동 버튼
-        $('#working-directory-submit').on('click', function(e) {
-            dir = $('#working-directory').prop('value');
+        E_BROWSER_WD_SUBMIT.on('click', function(e) {
+            dir = E_BROWSER_WD.prop('value');
             browser_command({command: 'list', path: dir});
         });
 
         // 검색 inputs
-        $('#keyword').keypress(function(e) {
+        E_GLOBAL_SEARCH_KEYWORD.keypress(function(e) {
             if (e.keyCode && e.keyCode == 13) {
-                $('#globalSearchSearchBtn').trigger("click");
+                E_GLOBAL_SEARCH_BTN.trigger("click");
                 return false;
             }
         });
 
         // 현재 디렉토리
-        $('#working-directory').keypress(function(e) {
+        E_BROWSER_WD.keypress(function(e) {
             if (e.keyCode && e.keyCode == 13) {
-                $('#working-directory-submit').trigger("click");
+                E_BROWSER_WD_SUBMIT.trigger("click");
                 return false;
             }
         });

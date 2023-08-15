@@ -13,6 +13,7 @@ function set_elements() {
     E_SCAN_RADIO_2 = $('#sch-scan-mode2');
     E_SCAN_PERIODIC_ID = $('#sch-scan-mode-periodic-id');
     E_SAVE_BTN = $('#sch-save-btn');
+    E_ADD_BTN = $('#sch-add-btn');
     E_TASK = $('#sch-task');
     E_DESC = $('#sch-description');
     E_MODAL_TITLE = $('#sch-add-modal_title');
@@ -22,6 +23,13 @@ function set_elements() {
     E_CONFIRM_BTN = $('#confirm_button');
     E_CONFIRM_MODAL = $("#confirm_modal");
     E_WORKING_DIR = $('#working-directory');
+    E_BROWSER_WD = $('#working-directory');
+    E_BROWSER_WD_SUBMIT = $('#working-directory-submit');
+    E_GLOBAL_SEARCH_BTN = $('#globalSearchSearchBtn');
+    E_GLOBAL_SEARCH_KEYWORD = $('#keyword');
+    E_GLOBAL_SEARCH_ORDER = $('#order');
+    E_GLOBAL_SEARCH_OPTION1 = $('#option1');
+    E_GLOBAL_SEARCH_OPTION2 = $('#option2');
 }
 
 function split_by_newline(text) {
@@ -312,12 +320,17 @@ function disabled_by_task(task) {
     E_SCAN_PERIODIC_ID.prop('disabled', false);
 
     switch(task) {
+        case TASK_KEYS[4]:
         case TASK_KEYS[5]:
             E_TARGET.prop('disabled', true);
             E_VFS.prop('disabled', true);
             E_RECUR.bootstrapToggle('disable')
             E_SCH_AUTO.bootstrapToggle('disable');
-            E_SCH_RADIO_1.prop('checked', true);
+            if (task == TASK_KEYS[5]) {
+                E_SCH_RADIO_1.prop('checked', true);
+            } else {
+                E_SCH_RADIO_1.prop('disabled', true);
+            }
             E_SCH_RADIO_0.prop('disabled', true);
             E_SCH_RADIO_2.prop('disabled', true);
             E_INTERVAL.prop('disabled', true);
@@ -327,13 +340,10 @@ function disabled_by_task(task) {
             E_SCAN_PERIODIC_ID.prop('disabled', true);
             break;
         case TASK_KEYS[1]:
-            E_SCAN_RADIO_0.prop('disabled', true);
-            E_SCAN_RADIO_1.prop('disabled', true);
-            E_SCAN_RADIO_2.prop('disabled', true);
-            E_SCAN_PERIODIC_ID.prop('disabled', true);
-            break;
         case TASK_KEYS[3]:
-            E_TARGET.prop('disabled', true);
+            if (task == TASK_KEYS[3]){
+                E_TARGET.prop('disabled', true);
+            }
             E_SCAN_RADIO_0.prop('disabled', true);
             E_SCAN_RADIO_1.prop('disabled', true);
             E_SCAN_RADIO_2.prop('disabled', true);
@@ -342,20 +352,6 @@ function disabled_by_task(task) {
         case TASK_KEYS[2]:
             E_VFS.prop('disabled', true);
             E_RECUR.bootstrapToggle('disable')
-            break;
-        case TASK_KEYS[4]:
-            E_TARGET.prop('disabled', true);
-            E_VFS.prop('disabled', true);
-            E_RECUR.bootstrapToggle('disable')
-            E_SCAN_RADIO_0.prop('disabled', true);
-            E_SCAN_RADIO_1.prop('disabled', true);
-            E_SCAN_RADIO_2.prop('disabled', true);
-            E_SCAN_PERIODIC_ID.prop('disabled', true);
-            E_SCH_RADIO_0.prop('disabled', true);
-            E_SCH_RADIO_1.prop('disabled', true);
-            E_SCH_RADIO_2.prop('disabled', true);
-            E_INTERVAL.prop('disabled', true);
-            E_SCH_AUTO.bootstrapToggle('disable');
             break;
     }
 }
