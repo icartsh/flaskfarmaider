@@ -306,6 +306,7 @@ function make_list(data) {
 }
 
 function disabled_by_task(task) {
+    // reset inputs
     E_TARGET.prop('disabled', false);
     E_VFS.prop('disabled', false);
     E_RECUR.bootstrapToggle('enable')
@@ -318,16 +319,21 @@ function disabled_by_task(task) {
     E_SCAN_RADIO_1.prop('disabled', false);
     E_SCAN_RADIO_2.prop('disabled', false);
     E_SCAN_PERIODIC_ID.prop('disabled', false);
+    disabled_by_schedule_mode($('input[id^="sch-schedule-mode"][type="radio"]:checked').prop('value'));
+    disabled_by_scan_mode($('input[id^="sch-scan-mode"][type="radio"]:checked').prop('value'));
 
     switch(task) {
         case TASK_KEYS[4]:
         case TASK_KEYS[5]:
             E_TARGET.prop('disabled', true);
             E_VFS.prop('disabled', true);
-            E_RECUR.bootstrapToggle('disable')
+            E_RECUR.bootstrapToggle('off');
+            E_RECUR.bootstrapToggle('disable');
+            E_SCH_AUTO.bootstrapToggle('off');
             E_SCH_AUTO.bootstrapToggle('disable');
             if (task == TASK_KEYS[5]) {
                 E_SCH_RADIO_1.prop('checked', true);
+                disabled_by_schedule_mode($('input[id^="sch-schedule-mode"][type="radio"]:checked').prop('value'));
             } else {
                 E_SCH_RADIO_1.prop('disabled', true);
             }
@@ -351,33 +357,36 @@ function disabled_by_task(task) {
             break;
         case TASK_KEYS[2]:
             E_VFS.prop('disabled', true);
-            E_RECUR.bootstrapToggle('disable')
+            E_RECUR.bootstrapToggle('off');
+            E_RECUR.bootstrapToggle('disable');
             break;
     }
 }
 
 function disabled_by_schedule_mode(mode) {
-    E_INTERVAL.prop('disabled', false);
-    E_SCH_AUTO.bootstrapToggle('enable');
     switch(mode) {
         case FF_SCHEDULE_KEYS[0]:
         case FF_SCHEDULE_KEYS[1]:
             E_INTERVAL.prop('disabled', true);
+            E_SCH_AUTO.bootstrapToggle('off');
             E_SCH_AUTO.bootstrapToggle('disable');
             break;
+        case FF_SCHEDULE_KEYS[2]:
+            E_INTERVAL.prop('disabled', false);
+            E_SCH_AUTO.bootstrapToggle('enable');
     }
 }
 
 function disabled_by_scan_mode(mode) {
-    E_SCAN_PERIODIC_ID.prop('disabled', false);
-    E_TARGET.prop('disabled', false);
     switch(mode) {
         case SCAN_MODE_KEYS[0]:
         case SCAN_MODE_KEYS[2]:
+            E_TARGET.prop('disabled', false);
             E_SCAN_PERIODIC_ID.prop('disabled', true);
             break;
         case SCAN_MODE_KEYS[1]:
             E_TARGET.prop('disabled', true);
+            E_SCAN_PERIODIC_ID.prop('disabled', false);
             break;
     }
 }
