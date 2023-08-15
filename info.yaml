@@ -1,7 +1,10 @@
-title: "FLASKFARMAIDER"
-version: "0.6.1"
-package_name: "flaskfarmaider"
-developer: "halfaider"
-description: "Flaskfarm 보조 플러그인"
-home: "https://github.com/halfaider/flaskfarmaider"
-more: "https://raw.githubusercontent.com/halfaider/flaskfarmaider/main/README.md"
+title: 'FLASKFARMAIDER'
+version: '0.7.0'
+package_name: 'flaskfarmaider'
+developer: 'halfaider'
+description: 'Flaskfarm 보조 플러그인'
+home: 'https://github.com/halfaider/flaskfarmaider'
+more: 'https://raw.githubusercontent.com/halfaider/flaskfarmaider/main/README.md'
+require_plugin:
+  - package_name: 'plex_mate'
+    home: 'https://github.com/flaskfarm/plex_mate'

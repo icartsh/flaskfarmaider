@@ -9,6 +9,8 @@
 {% set VFS = args['setting_rclone_remote_vfs'] %}
 {% set SCAN_MODE_KEYS = args['scan_mode_keys'] %}
 {% set SCAN_MODES = args['scan_modes'] %}
+{% set PERIODICS = args['periodics'] %}
+{% set SECTIONS = args['sections'] %}
 {% block head %}
     <title>{{ get_web_title() }}</title>
     <meta http-equiv="Permissions-Policy" content="interest-cohort=()">
@@ -25,6 +27,8 @@
         var VFS = "{{ args['setting_rclone_remote_vfs'] }}";
         var SCAN_MODES = JSON.parse('{{ SCAN_MODES|tojson }}');
         var SCAN_MODE_KEYS = JSON.parse('{{ SCAN_MODE_KEYS|tojson }}');
+        var PERIODICS = JSON.parse('{{ PERIODICS|tojson }}');
+        var SECTIONS = JSON.parse('{{ SECTIONS|tojson }}');
     </script>
     <link rel="stylesheet" href="{{ url_for('.static', filename='css/flaskfarmaider.css') }}" />
 {% endblock %}

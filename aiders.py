@@ -49,6 +49,9 @@ class JobAider(Aider):
             vfs = job.vfs
             scan_mode = job.scan_mode
             periodic_id = job.periodic_id
+            clear_type = job.clear_type
+            clear_level = job.clear_level
+            clear_section = job.clear_section
         else:
             task = job.get('task')
             target = job.get('target')
@@ -56,11 +59,14 @@ class JobAider(Aider):
             vfs = P.ModelSetting.get(f'{SETTING}_rclone_remote_vfs')
             scan_mode = job.get('scan_mode')
             periodic_id = job.get('periodic_id')
+            clear_type = None
+            clear_level = None
+            clear_section = -1
 
         startup_executable = P.ModelSetting.get(f'{SETTING}_startup_executable')
         startup_executable = True if startup_executable.lower() == 'true' else False
 
-        brief = self.get_agent_brief(target, vfs, recursive, scan_mode, periodic_id, startup_executable)
+        brief = self.get_agent_brief(target, vfs, recursive, scan_mode, periodic_id, startup_executable, clear_type, clear_level, clear_section)
         agent = self.hire_agent(task, brief)
 
         # start task
@@ -75,7 +81,9 @@ class JobAider(Aider):
             job.journal = ('\n').join(journal)
             job.set_status(STATUS_KEYS[2])
 
-    def get_agent_brief(self, target: str, vfs: str, recursive: bool, scan_mode: str, periodic_id: int, startup_executable: bool) -> dict[str, Any]:
+    def get_agent_brief(self, target: str, vfs: str, recursive: bool,
+                        scan_mode: str, periodic_id: int, startup_executable: bool,
+                        clear_type: str = None, clear_level: str = None, clear_section: int = -1) -> dict[str, Any]:
         return {
             'rclone': {
                 'rc_addr': P.ModelSetting.get(f'{SETTING}_rclone_remote_addr'),
@@ -94,6 +102,9 @@ class JobAider(Aider):
                 'periodic_id': periodic_id,
                 'scan_mode': scan_mode,
                 'command': '',
+                'clear_type': clear_type,
+                'clear_level': clear_level,
+                'clear_section': clear_section,
             },
             'init': {
                 'execute_commands': startup_executable,
@@ -168,6 +179,9 @@ class JobAider(Aider):
             model.schedule_auto_start = True if schedule_auto_start.lower() == 'true' else False
             model.scan_mode = formdata.get('sch-scan-mode')[0] if formdata.get('sch-scan-mode') else SCAN_MODE_KEYS[0]
             model.periodic_id = int(formdata.get('sch-scan-mode-periodic-id')[0]) if formdata.get('sch-scan-mode-periodic-id') else -1
+            model.clear_type = formdata.get('sch-clear-type')[0] if formdata.get('sch-clear-type') else ''
+            model.clear_level = formdata.get('sch-clear-level')[0] if formdata.get('sch-clear-level') else ''
+            model.clear_section = int(formdata.get('sch-clear-section')[0]) if formdata.get('sch-clear-section') else -1
             model.save()
 
             if model.id:

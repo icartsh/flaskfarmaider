@@ -30,6 +30,9 @@ function set_elements() {
     E_GLOBAL_SEARCH_ORDER = $('#order');
     E_GLOBAL_SEARCH_OPTION1 = $('#option1');
     E_GLOBAL_SEARCH_OPTION2 = $('#option2');
+    E_CLEAR_SECTION = $('#sch-clear-section');
+    E_CLEAR_TYPE = $('#sch-clear-type');
+    E_CLEAR_LEVEL = $('#sch-clear-level');
 }
 
 function split_by_newline(text) {
@@ -228,6 +231,9 @@ function make_list(data) {
         col_menu += '" data-schedule_mode="' + model.schedule_mode;
         col_menu += '" data-schedule_interval="' + model.schedule_interval;
         col_menu += '" data-schedule_auto_start="' + model.schedule_auto_start;
+        col_menu += '" data-clear_section="' + model.clear_section;
+        col_menu += '" data-clear_level="' + model.clear_level;
+        col_menu += '" data-clear_type="' + model.clear_type;
         col_menu += '">메뉴</button></td>';
 
         row_sub = '<tr><td colspan="8" class="p-0"><div id="collapse-' + model.id;
@@ -322,6 +328,16 @@ function disabled_by_task(task) {
     disabled_by_schedule_mode($('input[id^="sch-schedule-mode"][type="radio"]:checked').prop('value'));
     disabled_by_scan_mode($('input[id^="sch-scan-mode"][type="radio"]:checked').prop('value'));
 
+    if (task == TASK_KEYS[4]) {
+        E_CLEAR_SECTION.prop('disabled', false);
+        E_CLEAR_TYPE.prop('disabled', false);
+        E_CLEAR_LEVEL.prop('disabled', false);
+    } else {
+        E_CLEAR_SECTION.prop('disabled', true);
+        E_CLEAR_TYPE.prop('disabled', true);
+        E_CLEAR_LEVEL.prop('disabled', true);
+    }
+
     switch(task) {
         case TASK_KEYS[4]:
         case TASK_KEYS[5]:
@@ -329,17 +345,15 @@ function disabled_by_task(task) {
             E_VFS.prop('disabled', true);
             E_RECUR.bootstrapToggle('off');
             E_RECUR.bootstrapToggle('disable');
-            E_SCH_AUTO.bootstrapToggle('off');
-            E_SCH_AUTO.bootstrapToggle('disable');
             if (task == TASK_KEYS[5]) {
+                E_SCH_RADIO_0.prop('disabled', true);
+                E_SCH_RADIO_2.prop('disabled', true);
                 E_SCH_RADIO_1.prop('checked', true);
+                E_INTERVAL.prop('disabled', true);
+                E_SCH_AUTO.bootstrapToggle('off');
+                E_SCH_AUTO.bootstrapToggle('disable');
                 disabled_by_schedule_mode($('input[id^="sch-schedule-mode"][type="radio"]:checked').prop('value'));
-            } else {
-                E_SCH_RADIO_1.prop('disabled', true);
             }
-            E_SCH_RADIO_0.prop('disabled', true);
-            E_SCH_RADIO_2.prop('disabled', true);
-            E_INTERVAL.prop('disabled', true);
             E_SCAN_RADIO_0.prop('disabled', true);
             E_SCAN_RADIO_1.prop('disabled', true);
             E_SCAN_RADIO_2.prop('disabled', true);
@@ -391,24 +405,72 @@ function disabled_by_scan_mode(mode) {
     }
 }
 
+function set_clear_section(type) {
+    E_CLEAR_SECTION.html('');
+    if (type == null) {
+        type = 'movie';
+    }
+    SECTIONS[type].forEach(function(item, index) {
+        E_CLEAR_SECTION.append(
+            $('<option></option>').prop('value', item.id).html(item.name)
+        )
+    });
+}
+
+function set_clear_level(type) {
+    E_CLEAR_LEVEL.html('');
+    E_CLEAR_LEVEL.append($('<option></option>').prop('value', 'start1').html('1단계'));
+    if (type == null) {
+        type = 'movie';
+    }
+    switch(type) {
+        case 'movie':
+        case 'show':
+            if (type == 'show') {
+                E_CLEAR_LEVEL.append($('<option></option>').prop('value', 'start21').html('2-1단계'));
+                E_CLEAR_LEVEL.append($('<option></option>').prop('value', 'start22').html('2-2단계'));
+            } else {
+                E_CLEAR_LEVEL.append($('<option></option>').prop('value', 'start2').html('2단계'));
+            }
+            E_CLEAR_LEVEL.append($('<option></option>').prop('value', 'start3').html('3단계'));
+            E_CLEAR_LEVEL.append($('<option></option>').prop('value', 'start4').html('4단계'));
+            break;
+        case 'music':
+            E_CLEAR_LEVEL.append($('<option></option>').prop('value', 'start2').html('2단계'));
+            break;
+    }
+}
+
 function schedule_modal(from, data) {
+    PERIODICS.forEach(function(item, index) {
+        E_SCAN_PERIODIC_ID.append(
+            $('<option></option>').prop('value', item.idx).html(item.idx + '. ' + item.name + ' : ' + item.desc)
+        );
+    });
+
     if (from == 'edit') {
         // 편집
         E_SAVE_BTN.data('id', data.id);
         E_TASK.prop('value', data.task);
-        disabled_by_task(data.task);
         E_DESC.prop('value', data.desc);
         E_TARGET.prop('value', data.target);
         E_VFS.prop('value', data.vfs);
         E_RECUR.bootstrapToggle((data.recursive) ? 'on' : 'off');
         $('input:radio[name="sch-scan-mode"][value="' + data.scan_mode + '"]').prop('checked', true);
-        E_SCAN_PERIODIC_ID.prop('value', data.periodic_id);
         disabled_by_scan_mode(data.scan_mode);
+        E_SCAN_PERIODIC_ID.prop('value', data.periodic_id);
         $('input:radio[name="sch-schedule-mode"][value="' + data.schedule_mode + '"]').prop('checked', true);
         disabled_by_schedule_mode(data.schedule_mode);
         E_INTERVAL.prop('value', data.schedule_interval);
+        console.log((data.schedule_auto_start) ? 'on' : 'off');
         E_SCH_AUTO.bootstrapToggle((data.schedule_auto_start) ? 'on' : 'off');
         E_MODAL_TITLE.html('일정 편집 - ' + data.id);
+        E_CLEAR_TYPE.prop('value', data.clear_type);
+        set_clear_section(data.clear_type);
+        set_clear_level(data.clear_type);
+        E_CLEAR_SECTION.prop('value', data.clear_section);
+        E_CLEAR_LEVEL.prop('value', data.clear_level);
+        disabled_by_task(data.task);
     } else {
         // 새로 추가
         E_TASK.prop('value', TASK_KEYS[0]);
@@ -423,13 +485,17 @@ function schedule_modal(from, data) {
         E_VFS.prop('value', VFS);
         E_RECUR.bootstrapToggle('off');
         E_SCAN_RADIO_0.prop('checked', true);
+        E_SCAN_PERIODIC_ID.prop('value', 1);
         E_SCH_RADIO_0.prop('checked', true);
         E_INTERVAL.prop('value', '');
         E_SCH_AUTO.bootstrapToggle('off');
-        E_MODAL_TITLE.html("일정 추가");
+        E_CLEAR_TYPE.prop('value', 'movie');
         disabled_by_task(E_TASK.prop('value'));
         disabled_by_schedule_mode(FF_SCHEDULE_KEYS[0]);
         disabled_by_scan_mode(SCAN_MODE_KEYS[0]);
+        set_clear_section(E_CLEAR_TYPE.prop('value'));
+        set_clear_level(E_CLEAR_TYPE.prop('value'));
+        E_MODAL_TITLE.html("일정 추가");
     }
     E_MODAL.modal({backdrop: 'static', keyboard: false}, 'show');
 }

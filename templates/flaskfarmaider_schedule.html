@@ -33,7 +33,42 @@
             [SCAN_MODE_KEYS[2], SCAN_MODES[SCAN_MODE_KEYS[2]]['name']],
         ]
     ) }}
-    {{ macros.setting_input_text('sch-scan-mode-periodic-id', '주기적 스캔 ID', desc=['주기적 스캔 작업 목록의 ID 번호'], col='2') }}
+    {{ macros.setting_select(
+            'sch-scan-mode-periodic-id',
+            '주기적 스캔',
+            [],
+            desc='주기적 스캔 작업'
+        )
+    }}
+    {{ macros.m_hr() }}
+    {{ macros.setting_select(
+            'sch-clear-type',
+            '라이브러리 타입',
+            [
+                ['movie', '영화'],
+                ['show', 'TV'],
+                ['music', '음악'],
+            ],
+            col='3',
+            desc=None
+        )
+    }}
+    {{ macros.setting_select(
+            'sch-clear-level',
+            '정리 단계',
+            [],
+            col='3',
+            desc=None
+        )
+    }}
+    {{ macros.setting_select(
+            'sch-clear-section',
+            '섹션',
+            [],
+            col='5',
+            desc=None
+        )
+    }}
     {{ macros.m_hr() }}
     {{ macros.setting_radio_with_value(
         'sch-schedule-mode',
@@ -175,6 +210,11 @@
             disabled_by_scan_mode($(this).prop('value'));
         });
 
+        // 라이브러리 타입에 따라 목록 변경
+        E_CLEAR_TYPE.change(function() {
+            set_clear_section($(this).prop('value'));
+            set_clear_level($(this).prop('value'));
+        })
 
         // 일정 저장 버튼
         E_SAVE_BTN.on('click', function() {

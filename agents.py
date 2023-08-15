@@ -219,6 +219,7 @@ class PlexmateAgent(PluginAgent):
                 'scan_web': self.operation_scan_web,
                 'refresh_web': self.operation_refresh_web,
                 'scan_periodic': self.operation_periodic,
+                'clear': self.operation_clear,
             }
         )
         self.plex = {
@@ -358,6 +359,11 @@ class PlexmateAgent(PluginAgent):
         plex_db = self.get_plugin('plex_mate').PlexDBHandle
         return [location.get('root_path') for location in plex_db.section_location(library_id=section_id)]
 
+    def get_section_by_id(self, section_id):
+        '''section_id: int -> dict[str, Any]'''
+        plex_db = self.get_plugin('plex_mate').PlexDBHandle
+        return plex_db.library_section(section_id)
+
     def operation_scan(self):
         '''None -> None'''
         '''
@@ -370,7 +376,6 @@ class PlexmateAgent(PluginAgent):
             self.add_scans(self.targets)
         else:
             self.logger.info(self.journal('스캔 대상이 없어요.'))
-
 
     def operation_scan_web(self):
         if self.targets:
@@ -445,6 +450,21 @@ class PlexmateAgent(PluginAgent):
                     self.logger.info(self.journal('새로고침 대상이 없어요.'))
         else:
             self.logger.error(self.journal('주기적 스캔 작업을 찾을 수 없어요.'))
+
+    def operation_clear(self):
+        '''None -> None'''
+        module = self.get_module('clear')
+        section_id = self.config.args.clear_section
+        level = self.config.args.clear_level
+        info = f'{level}, {self.get_section_by_id(section_id).get("name")}'
+        page = module.get_page(self.config.args.clear_type)
+        status = page.data.get('status').get('is_working')
+        if status == 'wait':
+            self.logger.info(self.journal(f'파일 정리 시작: {info}'))
+            page.task_interface(level, section_id, 'false').join()
+            self.logger.info(self.journal(f'파일 정리 종료: {info}'))
+        elif status == 'run':
+            self.logger.info(self.journal(f'다른 파일 정리 실행중'))
 
 
 class RcloneAgent(Agent):

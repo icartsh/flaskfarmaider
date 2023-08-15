@@ -44,6 +44,28 @@ class BaseModule(PluginModuleBase):
             except Exception as e:
                 pass
             args = P.ModelSetting.to_dict()
+
+            plexmate = F.PluginManager.get_plugin_instance('plex_mate')
+            if plexmate:
+                periodics = []
+                jobs = plexmate.logic.get_module('periodic').get_jobs()
+                for job in jobs:
+                    idx = int(job['job_id'].replace('plex_mate_periodic_', '')) + 1
+                    section = job.get('섹션ID', -1)
+                    section_data = plexmate.PlexDBHandle.library_section(section)
+                    if section_data:
+                        name = section_data.get('name')
+                    else:
+                        P.logger.debug(f'skip nonexistent section: {section}')
+                        continue
+                    periodics.append({'idx': idx, 'section': section, 'name': name, 'desc': job.get('설명', '')})
+                args['periodics'] = periodics
+                sections = {
+                    'movie': plexmate.PlexDBHandle.library_sections(section_type=1),
+                    'show': plexmate.PlexDBHandle.library_sections(section_type=2),
+                    'music': plexmate.PlexDBHandle.library_sections(section_type=8),
+                }
+                args['sections'] = sections
             args['module_name'] = self.name
             args['task_keys'] = TASK_KEYS
             args['tasks'] = TASKS
@@ -90,14 +112,12 @@ class Setting(BaseModule):
                 db_file = F.app.config['SQLALCHEMY_BINDS'][P.package_name].replace('sqlite:///', '').split('?')[0]
                 current_db_ver = P.ModelSetting.get(f'{self.name}_db_version')
                 P.logger.debug(f'current db version: {current_db_ver}')
+                connection = sqlite3.connect(db_file)
+                connection.row_factory = sqlite3.Row
+                cs = connection.cursor()
+                table_jobs = f'{__package__}_jobs'
                 if current_db_ver == '1':
                     P.logger.debug('start migration from 1 to 2...')
-                    connection = sqlite3.connect(db_file)
-                    connection.row_factory = sqlite3.Row
-                    cs = connection.cursor()
-
-                    table_jobs = f'{__package__}_jobs'
-
                     # check old table
                     old_table_rows = cs.execute(f"SELECT count(*) FROM sqlite_master WHERE type='table' AND name='job'").fetchall()
                     if old_table_rows[0]['count(*)']:
@@ -177,9 +197,21 @@ class Setting(BaseModule):
                                 P.logger.error(f'wrong scan_mode: {row["scan_mode"]}')
                         connection.commit()
 
-                    connection.close()
+
                     P.ModelSetting.set(f'{self.name}_db_version', '2')
-                    F.db.session.flush()
+                elif current_db_ver == '2':
+                    P.logger.debug('start migration from 2 to 3...')
+                    rows = cs.execute(f'SELECT name FROM pragma_table_info("{table_jobs}")').fetchall()
+                    cols = [row['name'] for row in rows]
+                    if 'clear_type' not in cols:
+                        cs.execute(f'ALTER TABLE "{table_jobs}" ADD COLUMN "clear_type" VARCHAR').fetchall()
+                    if 'clear_level' not in cols:
+                        cs.execute(f'ALTER TABLE "{table_jobs}" ADD COLUMN "clear_level" VARCHAR').fetchall()
+                    if 'clear_section' not in cols:
+                        cs.execute(f'ALTER TABLE "{table_jobs}" ADD COLUMN "clear_section" INTEGER').fetchall()
+                    P.ModelSetting.set(f'{self.name}_db_version', '3')
+                F.db.session.flush()
+                connection.close()
         except Exception as e:
             P.logger.error(f'Exception:{str(e)}')
             P.logger.error(traceback.format_exc())
