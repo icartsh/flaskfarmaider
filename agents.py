@@ -205,8 +205,6 @@ class PlexmateAgent(PluginAgent):
     def __init__(self, config):
         '''config: dict | AgentConfig'''
         super().__init__(config, name='agent.plexmate')
-        # from .plex_web import PlexWebHandle # type: ignore
-        # self.plex = PlexWebHandle
         self.P = self.get_plugin('plex_mate')
         # --dirs 옵션 우선
         if not self.targets and hasattr(self.config.args, 'sections'):
@@ -223,8 +221,6 @@ class PlexmateAgent(PluginAgent):
                 'scan_periodic': self.operation_periodic,
             }
         )
-
-        # http://[PMS_IP_ADDRESS]:32400/library/sections/29/refresh?path=/Users/plexuser/Movies/Media/Movies/1080p&X-Plex-Token=YourTokenGoesHere
         self.plex = {
             'url': self.P.ModelSetting.get('base_url'),
             'token': self.P.ModelSetting.get('base_token'),
@@ -624,7 +620,7 @@ class InitAgent(PluginAgent):
     def __init__(self, config, name=None):
         '''config: dict, name: str = None'''
         super().__init__(config, name=name)
-        self.plugins_installed = self.F.PluginManager.get_plugin_name_list()
+        self.plugins_installed = [plugin_name for plugin_name in self.F.PluginManager.all_package_list.keys()]
 
     def get_installed_plugins(self):
         '''None -> dict[str, dict]'''
