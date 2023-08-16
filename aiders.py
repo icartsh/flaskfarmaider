@@ -188,9 +188,15 @@ class JobAider(Aider):
             model.clear_section = int(formdata.get('sch-clear-section')[0]) if formdata.get('sch-clear-section') else -1
             model.save()
 
-            if model.id:
-                if _id > 0 and model.schedule_mode != FF_SCHEDULE_KEYS[2]:
-                    F.scheduler.remove_job(f'{__package__}_{_id}')
+            schedule_id = Job.create_schedule_id(model.id)
+            is_include = F.scheduler.is_include(schedule_id)
+            if is_include:
+                F.scheduler.remove_job(schedule_id)
+                if model.schedule_mode == FF_SCHEDULE_KEYS[2]:
+                    P.logger.debug(f'일정에 재등록합니다: {schedule_id}')
+                    self.add_schedule(model.id)
+
+            if model.id > 0:
                 result, data = True, '저장했습니다.'
             else:
                 result, data = False, '저장에 실패했습니다.'
