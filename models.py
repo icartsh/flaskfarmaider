@@ -8,7 +8,7 @@ from sqlalchemy import desc # type: ignore
 
 from plugin.model_base import ModelBase # type: ignore
 
-from .setup import P, F, SCHEDULE
+from .setup import PLUGIN, FRAMEWORK, SCHEDULE, LOGGER
 
 
 TASK_KEYS = ('refresh_scan', 'refresh', 'scan', 'pm_ready_refresh', 'clear', 'startup')
@@ -45,29 +45,29 @@ SCAN_MODES = {
 
 class Job(ModelBase):
 
-    P = P
+    P = PLUGIN
     __tablename__ = f'{__package__}_jobs'
     __table_args__ = {'mysql_collate': 'utf8_general_ci'}
-    __bind_key__ = P.package_name
+    __bind_key__ = PLUGIN.package_name
 
-    id = F.db.Column(F.db.Integer, primary_key=True)
-    ctime = F.db.Column(F.db.DateTime)
-    ftime = F.db.Column(F.db.DateTime)
-    desc = F.db.Column(F.db.String)
-    target = F.db.Column(F.db.String)
-    task = F.db.Column(F.db.String)
-    recursive = F.db.Column(F.db.Boolean)
-    vfs = F.db.Column(F.db.String)
-    schedule_mode = F.db.Column(F.db.String)
-    schedule_interval = F.db.Column(F.db.String)
-    schedule_auto_start = F.db.Column(F.db.Boolean)
-    status = F.db.Column(F.db.String)
-    journal = F.db.Column(F.db.Text)
-    scan_mode = F.db.Column(F.db.String)
-    periodic_id = F.db.Column(F.db.Integer)
-    clear_type = F.db.Column(F.db.String)
-    clear_section = F.db.Column(F.db.Integer)
-    clear_level = F.db.Column(F.db.String)
+    id = FRAMEWORK.db.Column(FRAMEWORK.db.Integer, primary_key=True)
+    ctime = FRAMEWORK.db.Column(FRAMEWORK.db.DateTime)
+    ftime = FRAMEWORK.db.Column(FRAMEWORK.db.DateTime)
+    desc = FRAMEWORK.db.Column(FRAMEWORK.db.String)
+    target = FRAMEWORK.db.Column(FRAMEWORK.db.String)
+    task = FRAMEWORK.db.Column(FRAMEWORK.db.String)
+    recursive = FRAMEWORK.db.Column(FRAMEWORK.db.Boolean)
+    vfs = FRAMEWORK.db.Column(FRAMEWORK.db.String)
+    schedule_mode = FRAMEWORK.db.Column(FRAMEWORK.db.String)
+    schedule_interval = FRAMEWORK.db.Column(FRAMEWORK.db.String)
+    schedule_auto_start = FRAMEWORK.db.Column(FRAMEWORK.db.Boolean)
+    status = FRAMEWORK.db.Column(FRAMEWORK.db.String)
+    journal = FRAMEWORK.db.Column(FRAMEWORK.db.Text)
+    scan_mode = FRAMEWORK.db.Column(FRAMEWORK.db.String)
+    periodic_id = FRAMEWORK.db.Column(FRAMEWORK.db.Integer)
+    clear_type = FRAMEWORK.db.Column(FRAMEWORK.db.String)
+    clear_section = FRAMEWORK.db.Column(FRAMEWORK.db.Integer)
+    clear_level = FRAMEWORK.db.Column(FRAMEWORK.db.String)
 
     def __init__(self, task: str, schedule_mode: str = FF_SCHEDULE_KEYS[0], schedule_auto_start: bool = False,
                  desc: str = '', target: str = '', recursive: bool = False,
@@ -92,8 +92,8 @@ class Job(ModelBase):
     @classmethod
     def make_query(cls, request: LocalProxy, order: str ='desc', search: str = '', option1: str = 'all', option2: str = 'all') -> Query:
         '''override'''
-        with F.app.app_context():
-            query = cls.make_query_search(F.db.session.query(cls), search, cls.target)
+        with FRAMEWORK.app.app_context():
+            query = cls.make_query_search(FRAMEWORK.db.session.query(cls), search, cls.target)
             if option1 != 'all':
                 query = query.filter(cls.task == option1)
             if option2 != 'all':
@@ -112,7 +112,7 @@ class Job(ModelBase):
             if save:
                 self.save()
         else:
-            P.logger.error(f'wrong status: {status}')
+            LOGGER.error(f'wrong status: {status}')
         return self
 
     @classmethod
@@ -137,15 +137,15 @@ class Job(ModelBase):
             ret['list'] = []
             for item in lists:
                 item = item.as_dict()
-                item['is_include'] = True if F.scheduler.is_include(cls.create_schedule_id(item['id'])) else False
-                item['is_running'] = True if F.scheduler.is_running(cls.create_schedule_id(item['id'])) else False
+                item['is_include'] = True if FRAMEWORK.scheduler.is_include(cls.create_schedule_id(item['id'])) else False
+                item['is_running'] = True if FRAMEWORK.scheduler.is_running(cls.create_schedule_id(item['id'])) else False
                 ret['list'].append(item)
             ret['paging'] = cls.get_paging_info(count, page, page_size)
-            P.ModelSetting.set(f'{SCHEDULE}_last_list_option', f'{order}|{page}|{search}|{option1}|{option2}')
+            PLUGIN.ModelSetting.set(f'{SCHEDULE}_last_list_option', f'{order}|{page}|{search}|{option1}|{option2}')
             return ret
         except Exception as e:
-            P.logger.error(f"Exception:{str(e)}")
-            P.logger.error(traceback.format_exc())
+            LOGGER.error(f"Exception:{str(e)}")
+            LOGGER.error(traceback.format_exc())
 
     @classmethod
     def create_schedule_id(cls, job_id: int) -> str:

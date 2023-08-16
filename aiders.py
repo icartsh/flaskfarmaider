@@ -12,7 +12,7 @@ import requests
 
 from framework.scheduler import Job as FrameworkJob # type: ignore
 
-from .setup import P, F, SETTING
+from .setup import PLUGIN, FRAMEWORK, SETTING, LOGGER
 from .models import Job, TASKS, TASK_KEYS, STATUS_KEYS, FF_SCHEDULE_KEYS, SCAN_MODE_KEYS
 from .agents import Agent, RcloneAgent, PlexmateAgent, UbuntuAgent
 
@@ -40,7 +40,6 @@ class JobAider(Aider):
 
     def __init__(self):
         super().__init__()
-        self.plexmate = F.PluginManager.get_plugin_instance('plex_mate')
 
     def handle(self, job: Job | dict[str, Any]):
         if isinstance(job, Job):
@@ -57,14 +56,14 @@ class JobAider(Aider):
             task = job.get('task')
             target = job.get('target')
             recursive = job.get('recursive')
-            vfs = P.ModelSetting.get(f'{SETTING}_rclone_remote_vfs')
+            vfs = PLUGIN.ModelSetting.get(f'{SETTING}_rclone_remote_vfs')
             scan_mode = job.get('scan_mode')
             periodic_id = job.get('periodic_id')
             clear_type = None
             clear_level = None
             clear_section = -1
 
-        startup_executable = P.ModelSetting.get(f'{SETTING}_startup_executable')
+        startup_executable = PLUGIN.ModelSetting.get(f'{SETTING}_startup_executable')
         startup_executable = True if startup_executable.lower() == 'true' else False
 
         brief = self.get_agent_brief(target, vfs, recursive, scan_mode, periodic_id, startup_executable, clear_type, clear_level, clear_section)
@@ -72,9 +71,9 @@ class JobAider(Aider):
 
         # start task
         self.run_agent(self, agent, job)
-        P.logger.debug(f'job done...')
+        LOGGER.debug(f'job done...')
 
-    @F.celery.task
+    @FRAMEWORK.celery.task
     def run_agent(self, agent: Agent, job: Job | dict[str, Any]) -> None:
         if isinstance(job, Job): job.set_status(STATUS_KEYS[1])
         journal = agent.run()
@@ -87,14 +86,14 @@ class JobAider(Aider):
                         clear_type: str = None, clear_level: str = None, clear_section: int = -1) -> dict[str, Any]:
         return {
             'rclone': {
-                'rc_addr': P.ModelSetting.get(f'{SETTING}_rclone_remote_addr'),
-                'rc_user': P.ModelSetting.get(f'{SETTING}_rclone_remote_user'),
-                'rc_pass': P.ModelSetting.get(f'{SETTING}_rclone_remote_pass'),
-                'rc_mapping': self.parse_mappings(P.ModelSetting.get(f'{SETTING}_rclone_remote_mapping')),
+                'rc_addr': PLUGIN.ModelSetting.get(f'{SETTING}_rclone_remote_addr'),
+                'rc_user': PLUGIN.ModelSetting.get(f'{SETTING}_rclone_remote_user'),
+                'rc_pass': PLUGIN.ModelSetting.get(f'{SETTING}_rclone_remote_pass'),
+                'rc_mapping': self.parse_mappings(PLUGIN.ModelSetting.get(f'{SETTING}_rclone_remote_mapping')),
             },
             'log': {
-                'logger': P.logger,
-                'level': P.logger.level
+                'logger': LOGGER,
+                'level': LOGGER.level
             },
             'args': {
                 'dirs': [target],
@@ -109,15 +108,15 @@ class JobAider(Aider):
             },
             'init': {
                 'execute_commands': startup_executable,
-                'commands': self.split_by_newline(P.ModelSetting.get(f'{SETTING}_startup_commands')),
-                'timeout': int(P.ModelSetting.get(f'{SETTING}_startup_timeout')),
+                'commands': self.split_by_newline(PLUGIN.ModelSetting.get(f'{SETTING}_startup_commands')),
+                'timeout': int(PLUGIN.ModelSetting.get(f'{SETTING}_startup_timeout')),
                 'dependencies': yaml.safe_load(SettingAider.depends()).get('dependencies'),
             },
-            'ff_config': F.config['config_filepath'],
+            'ff_config': FRAMEWORK.config['config_filepath'],
             'plexmate': {
-                'max_scan_time': int(P.ModelSetting.get(f'{SETTING}_plexmate_max_scan_time')),
-                'timeover_range': P.ModelSetting.get(f'{SETTING}_plexmate_timeover_range'),
-                'plex_mapping': self.parse_mappings(P.ModelSetting.get(f'{SETTING}_plexmate_plex_mapping')),
+                'max_scan_time': int(PLUGIN.ModelSetting.get(f'{SETTING}_plexmate_max_scan_time')),
+                'timeover_range': PLUGIN.ModelSetting.get(f'{SETTING}_plexmate_timeover_range'),
+                'plex_mapping': self.parse_mappings(PLUGIN.ModelSetting.get(f'{SETTING}_plexmate_plex_mapping')),
             }
         }
 
@@ -148,7 +147,7 @@ class JobAider(Aider):
         elif task == TASK_KEYS[5]:
             agent = UbuntuAgent(brief)
         else:
-            if self.plexmate:
+            if PLUGIN.get_plex_mate():
                 agent = PlexmateAgent(brief)
             else:
                 raise Exception('plex_mate 플러그인을 찾을 수 없습니다.')
@@ -189,11 +188,11 @@ class JobAider(Aider):
             model.save()
 
             schedule_id = Job.create_schedule_id(model.id)
-            is_include = F.scheduler.is_include(schedule_id)
+            is_include = FRAMEWORK.scheduler.is_include(schedule_id)
             if is_include:
-                F.scheduler.remove_job(schedule_id)
+                FRAMEWORK.scheduler.remove_job(schedule_id)
                 if model.schedule_mode == FF_SCHEDULE_KEYS[2]:
-                    P.logger.debug(f'일정에 재등록합니다: {schedule_id}')
+                    LOGGER.debug(f'일정에 재등록합니다: {schedule_id}')
                     self.add_schedule(model.id)
 
             if model.id > 0:
@@ -201,7 +200,7 @@ class JobAider(Aider):
             else:
                 result, data = False, '저장에 실패했습니다.'
         except Exception as e:
-            P.logger.error(traceback.format_exc())
+            LOGGER.error(traceback.format_exc())
             result, data = False, '저장에 실패했습니다.'
         finally:
             return result, data
@@ -210,12 +209,12 @@ class JobAider(Aider):
         try:
             model = model if model else Job.get_by_id(id)
             schedule_id = Job.create_schedule_id(model.id)
-            if not F.scheduler.is_include(schedule_id):
+            if not FRAMEWORK.scheduler.is_include(schedule_id):
                 sch = FrameworkJob(__package__, schedule_id, model.schedule_interval, self.handle, model.desc, args=(model,))
-                F.scheduler.add_job_instance(sch)
+                FRAMEWORK.scheduler.add_job_instance(sch)
             return True
         except Exception as e:
-            P.logger.error(traceback.format_exc())
+            LOGGER.error(traceback.format_exc())
             return False
 
     def parse_mappings(self, text: str) -> dict[str, str]:
@@ -234,12 +233,12 @@ class SettingAider(Aider):
         super().__init__()
 
     def remote_command(self, command: str, url: str, username: str, password: str) -> requests.Response:
-        P.logger.debug(url)
+        LOGGER.debug(url)
         return requests.post('{}/{}'.format(url, command), auth=(username, password))
 
     @classmethod
     def depends(cls, text: str = None):
-        yaml_file = f'{F.config["path_data"]}/db/flaskfarmaider.yaml'
+        yaml_file = f'{FRAMEWORK.config["path_data"]}/db/flaskfarmaider.yaml'
         source = f'{pathlib.Path(__file__).parent.resolve()}/files/flaskfarmaider.yaml'
         try:
             if not os.path.exists(yaml_file):
@@ -253,7 +252,7 @@ class SettingAider(Aider):
                     depends = ('').join(file.readlines())
             return depends
         except Exception as e:
-            P.logger.error(traceback.format_exc())
+            LOGGER.error(traceback.format_exc())
             if text: return text
             else:
                 with open(source, 'r') as file:

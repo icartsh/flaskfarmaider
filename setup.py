@@ -37,13 +37,18 @@ config = {
     'default_route': 'normal',
 }
 
-F = Framework.get_instance()
 P = create_plugin_instance(config)
+PLUGIN = P
+FRAMEWORK = Framework.get_instance()
+def get_plex_mate():
+    return FRAMEWORK.PluginManager.get_plugin_instance('plex_mate')
+PLUGIN.get_plex_mate = get_plex_mate
+LOGGER = PLUGIN.logger
 
 try:
     from .presenters import Setting
     from .presenters import Schedule
 
-    P.set_module_list([Setting, Schedule])
+    PLUGIN.set_module_list([Setting, Schedule])
 except Exception as e:
-    P.logger.debug(traceback.format_exc())
+    LOGGER.debug(traceback.format_exc())

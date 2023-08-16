@@ -9,22 +9,21 @@ from werkzeug.local import LocalProxy # type: ignore
 from plugin.create_plugin import PluginBase # type: ignore
 from plugin.logic_module_base import PluginModuleBase # type: ignore
 
-from .setup import F, P, SETTING, SCHEDULE
+from .setup import FRAMEWORK, PLUGIN, SETTING, SCHEDULE, LOGGER
 from .models import Job, TASK_KEYS, TASKS, STATUS_KEYS, STATUSES, FF_SCHEDULE_KEYS, FF_SCHEDULES, SCAN_MODE_KEYS, SCAN_MODES
 from .aiders import BrowserAider, SettingAider, JobAider
 
 
 class BaseModule(PluginModuleBase):
 
-    def __init__(self, P, first_menu: str = None, name: str = None, scheduler_desc: str = None) -> None:
-        super(BaseModule, self).__init__(P, name=name, scheduler_desc=scheduler_desc)
+    def __init__(self, plugin: PluginBase, first_menu: str = None, name: str = None, scheduler_desc: str = None) -> None:
+        super(BaseModule, self).__init__(plugin, name=name, scheduler_desc=scheduler_desc)
         self.db_default = {}
-        self.plexmate = F.PluginManager.get_plugin_instance('plex_mate')
 
     def pre_rendering(func: Callable) -> Callable:
         def wrapper(self, *args: Any, **kwargs: Any) -> Any:
             self.set_recent_menu(args[1])
-            P.logger.debug(f'rendering: {self.name}')
+            LOGGER.debug(f'rendering: {self.name}')
             result = func(self, *args, **kwargs)
             return result
         return wrapper
@@ -32,42 +31,43 @@ class BaseModule(PluginModuleBase):
     # 최근 사용 메뉴 갱신
     def set_recent_menu(self, req: LocalProxy) -> None:
         current_menu = '|'.join(req.path[1:].split('/')[1:])
-        P.logger.debug(f'current_menu: {current_menu}')
-        if not current_menu == P.ModelSetting.get('recent_menu_plugin'):
-            P.ModelSetting.set('recent_menu_plugin', current_menu)
+        LOGGER.debug(f'current_menu: {current_menu}')
+        if not current_menu == PLUGIN.ModelSetting.get('recent_menu_plugin'):
+            PLUGIN.ModelSetting.set('recent_menu_plugin', current_menu)
 
     @pre_rendering
     def process_menu(self, sub: str, req: LocalProxy) -> Response:
         try:
             try:
                 # yaml 파일 우선
-                P.ModelSetting.set(f'{SETTING}_startup_dependencies', SettingAider.depends())
+                PLUGIN.ModelSetting.set(f'{SETTING}_startup_dependencies', SettingAider.depends())
             except Exception as e:
                 pass
-            args = P.ModelSetting.to_dict()
+            args = PLUGIN.ModelSetting.to_dict()
 
-            if self.plexmate:
+            plexmate = PLUGIN.get_plex_mate()
+            if plexmate:
                 periodics = []
-                jobs = self.plexmate.logic.get_module('periodic').get_jobs()
+                jobs = plexmate.logic.get_module('periodic').get_jobs()
                 for job in jobs:
                     idx = int(job['job_id'].replace('plex_mate_periodic_', '')) + 1
                     section = job.get('섹션ID', -1)
-                    section_data = self.plexmate.PlexDBHandle.library_section(section)
+                    section_data = plexmate.PlexDBHandle.library_section(section)
                     if section_data:
                         name = section_data.get('name')
                     else:
-                        P.logger.debug(f'skip nonexistent section: {section}')
+                        LOGGER.debug(f'skip nonexistent section: {section}')
                         continue
                     periodics.append({'idx': idx, 'section': section, 'name': name, 'desc': job.get('설명', '')})
                 args['periodics'] = periodics
                 sections = {
-                    'movie': self.plexmate.PlexDBHandle.library_sections(section_type=1),
-                    'show': self.plexmate.PlexDBHandle.library_sections(section_type=2),
-                    'music': self.plexmate.PlexDBHandle.library_sections(section_type=8),
+                    'movie': plexmate.PlexDBHandle.library_sections(section_type=1),
+                    'show': plexmate.PlexDBHandle.library_sections(section_type=2),
+                    'music': plexmate.PlexDBHandle.library_sections(section_type=8),
                 }
                 args['sections'] = sections
             else:
-                P.logger.warning(f'plex_mate 플러그인을 찾을 수 없습니다.')
+                LOGGER.warning(f'plex_mate 플러그인을 찾을 수 없습니다.')
                 args['periodics'] = []
                 args['sections'] = {'movie': [], 'show': [], 'music': []}
             args['module_name'] = self.name
@@ -81,16 +81,16 @@ class BaseModule(PluginModuleBase):
             args['scan_modes'] = SCAN_MODES
             return render_template(f'{__package__}_{self.name}.html', args=args)
         except Exception as e:
-            P.logger.error(f'Exception:{str(e)}')
-            P.logger.error(traceback.format_exc())
+            LOGGER.error(f'Exception:{str(e)}')
+            LOGGER.error(traceback.format_exc())
             return render_template('sample.html', title=req.path)
 
 
 class Setting(BaseModule):
 
     # create_plugin_instance 에서 Module(Plugin)의 형태로 생성자를 호출
-    def __init__(self, P: PluginBase) -> None:
-        super().__init__(P, name=SETTING)
+    def __init__(self, plugin: PluginBase) -> None:
+        super().__init__(plugin, name=SETTING)
         self.aider = SettingAider()
         self.db_default = {
             f'{self.name}_db_version': '2',
@@ -112,25 +112,25 @@ class Setting(BaseModule):
         '''override'''
         try:
             import sqlite3
-            with F.app.app_context():
-                db_file = F.app.config['SQLALCHEMY_BINDS'][P.package_name].replace('sqlite:///', '').split('?')[0]
-                current_db_ver = P.ModelSetting.get(f'{self.name}_db_version')
-                P.logger.debug(f'current db version: {current_db_ver}')
+            with FRAMEWORK.app.app_context():
+                db_file = FRAMEWORK.app.config['SQLALCHEMY_BINDS'][PLUGIN.package_name].replace('sqlite:///', '').split('?')[0]
+                current_db_ver = PLUGIN.ModelSetting.get(f'{self.name}_db_version')
+                LOGGER.debug(f'current db version: {current_db_ver}')
                 connection = sqlite3.connect(db_file)
                 connection.row_factory = sqlite3.Row
                 cs = connection.cursor()
                 table_jobs = f'{__package__}_jobs'
                 if current_db_ver == '1':
-                    P.logger.debug('start migration from 1 to 2...')
+                    LOGGER.debug('start migration from 1 to 2...')
                     # check old table
                     old_table_rows = cs.execute(f"SELECT count(*) FROM sqlite_master WHERE type='table' AND name='job'").fetchall()
                     if old_table_rows[0]['count(*)']:
-                        P.logger.debug('old table exists!')
+                        LOGGER.debug('old table exists!')
                         cs.execute(f'ALTER TABLE "job" RENAME TO "job_OLD_TABLE"').fetchall()
                         new_table_rows = cs.execute(f"SELECT count(*) FROM sqlite_master WHERE type='table' AND name='{table_jobs}'").fetchall()
                         if new_table_rows[0]['count(*)']:
                             # drop new blank table
-                            P.logger.debug('new blank table exists!')
+                            LOGGER.debug('new blank table exists!')
                             cs.execute(f'DROP TABLE {table_jobs}').fetchall()
                         # rename table
                         cs.execute(f'ALTER TABLE "job_OLD_TABLE" RENAME TO "{table_jobs}"').fetchall()
@@ -148,12 +148,12 @@ class Setting(BaseModule):
                         # check before seting values
                         rows = cs.execute(f'SELECT name FROM pragma_table_info("{table_jobs}")').fetchall()
                         cols = [row['name'] for row in rows]
-                        P.logger.debug(f'table cols: {cols}')
+                        LOGGER.debug(f'table cols: {cols}')
                         rows = cs.execute(f'SELECT * FROM "{table_jobs}"').fetchall()
                         for row in rows:
-                            P.logger.debug(f"{row['id']} | {row['ctime']} | {row['task']} | {row['desc']} | {row['target']} | {row['scan_mode']} | {row['periodic_id']}")
+                            LOGGER.debug(f"{row['id']} | {row['ctime']} | {row['task']} | {row['desc']} | {row['target']} | {row['scan_mode']} | {row['periodic_id']}")
 
-                        P.logger.debug('========== set values ==========')
+                        LOGGER.debug('========== set values ==========')
 
                         # set values
                         rows = cs.execute(f'SELECT * FROM "{table_jobs}"').fetchall()
@@ -193,18 +193,15 @@ class Setting(BaseModule):
                         # final check
                         rows = cs.execute(f'SELECT * FROM "{table_jobs}"').fetchall()
                         for row in rows:
-                            P.logger.debug(f"{row['id']} | {row['ctime']} | {row['task']} | {row['desc']} | {row['target']} | {row['scan_mode']} | {row['periodic_id']}")
+                            LOGGER.debug(f"{row['id']} | {row['ctime']} | {row['task']} | {row['desc']} | {row['target']} | {row['scan_mode']} | {row['periodic_id']}")
                             #print(dict(row))
                             if not row['task'] in TASK_KEYS:
-                                P.logger.error(f'wrong task: {row["task"]}')
+                                LOGGER.error(f'wrong task: {row["task"]}')
                             if not row['scan_mode'] in SCAN_MODE_KEYS:
-                                P.logger.error(f'wrong scan_mode: {row["scan_mode"]}')
-                        connection.commit()
-
-
-                    P.ModelSetting.set(f'{self.name}_db_version', '2')
+                                LOGGER.error(f'wrong scan_mode: {row["scan_mode"]}')
+                    PLUGIN.ModelSetting.set(f'{self.name}_db_version', '2')
                 elif current_db_ver == '2':
-                    P.logger.debug('start migration from 2 to 3...')
+                    LOGGER.debug('start migration from 2 to 3...')
                     rows = cs.execute(f'SELECT name FROM pragma_table_info("{table_jobs}")').fetchall()
                     cols = [row['name'] for row in rows]
                     if 'clear_type' not in cols:
@@ -213,17 +210,18 @@ class Setting(BaseModule):
                         cs.execute(f'ALTER TABLE "{table_jobs}" ADD COLUMN "clear_level" VARCHAR').fetchall()
                     if 'clear_section' not in cols:
                         cs.execute(f'ALTER TABLE "{table_jobs}" ADD COLUMN "clear_section" INTEGER').fetchall()
-                    P.ModelSetting.set(f'{self.name}_db_version', '3')
-                F.db.session.flush()
+                    PLUGIN.ModelSetting.set(f'{self.name}_db_version', '3')
+                connection.commit()
+                FRAMEWORK.db.session.flush()
                 connection.close()
         except Exception as e:
-            P.logger.error(f'Exception:{str(e)}')
-            P.logger.error(traceback.format_exc())
+            LOGGER.error(f'Exception:{str(e)}')
+            LOGGER.error(traceback.format_exc())
 
     def process_command(self, command: str, arg1: str, arg2: str, arg3: str, req: LocalProxy) -> Response:
         '''ovverride'''
         ret = {'ret':'success', 'title': 'Rclone Remote'}
-        P.logger.debug('command: %s' % command)
+        LOGGER.debug('command: %s' % command)
         try:
             if command == 'command_test_connection':
                 response = self.aider.remote_command('vfs/list', arg1, arg2, arg3)
@@ -235,8 +233,8 @@ class Setting(BaseModule):
             elif command == 'save':
                 self.depends()
         except Exception as e:
-            P.logger.error(f'Exception:{str(e)}')
-            P.logger.error(traceback.format_exc())
+            LOGGER.error(f'Exception:{str(e)}')
+            LOGGER.error(traceback.format_exc())
             ret['ret'] = 'failed'
             ret['modal'] = str(traceback.format_exc())
             return jsonify(ret)
@@ -244,16 +242,16 @@ class Setting(BaseModule):
 
     def setting_save_after(self, changes: list) -> None:
         '''override'''
-        P.logger.debug(f'setting saved: {changes}')
+        LOGGER.debug(f'setting saved: {changes}')
         for change in changes:
             if change == f'{self.name}_startup_dependencies':
-                SettingAider.depends(P.ModelSetting.get(f'{SETTING}_startup_dependencies'))
+                SettingAider.depends(PLUGIN.ModelSetting.get(f'{SETTING}_startup_dependencies'))
 
 
 class Schedule(BaseModule):
 
-    def __init__(self, P: PluginBase) -> None:
-        super().__init__(P, name=SCHEDULE)
+    def __init__(self, plugin: PluginBase) -> None:
+        super().__init__(plugin, name=SCHEDULE)
         self.db_default = {
             f'{self.name}_working_directory': '/',
             f'{self.name}_last_list_option': ''
@@ -263,11 +261,11 @@ class Schedule(BaseModule):
         self.web_list_model = Job
 
     def process_command(self, command: str, arg1: str | None, arg2: str | None, arg3: str | None, request: LocalProxy) -> Response:
-        P.logger.debug(f'process_command: {command}, {arg1}, {arg2}, {arg3}')
+        LOGGER.debug(f'process_command: {command}, {arg1}, {arg2}, {arg3}')
         try:
             if command == 'list':
                 dir_list = json.dumps(self.browseraider.get_dir(arg1))
-                P.ModelSetting.set(f'{self.name}_working_directory', arg1)
+                PLUGIN.ModelSetting.set(f'{self.name}_working_directory', arg1)
                 result, data = True, dir_list
             elif command == 'save':
                 result, data = self.jobaider.update(parse_qs(arg1))
@@ -303,7 +301,7 @@ class Schedule(BaseModule):
                         'scan_mode': scan_mode,
                         'periodic_id': int(periodic_id) if periodic_id else -1,
                     }
-                    P.logger.debug(f'process_command: {job}')
+                    LOGGER.debug(f'process_command: {job}')
                     self.jobaider.handle(job)
                     result, data = True, '작업이 종료되었습니다.'
                 else:
@@ -311,21 +309,21 @@ class Schedule(BaseModule):
             else:
                 result, data = False, f'알 수 없는 명령입니다: {command}'
         except Exception as e:
-            P.logger.error(traceback.format_exc())
+            LOGGER.error(traceback.format_exc())
             result, data = False, str(e)
         finally:
             return jsonify({'success': result, 'data': data})
 
     def set_schedule(self, job_id: int | str, active: bool = False) -> tuple[bool, str]:
         schedule_id = Job.create_schedule_id(int(job_id))
-        is_include = F.scheduler.is_include(schedule_id)
+        is_include = FRAMEWORK.scheduler.is_include(schedule_id)
         if active and is_include:
             result, data = False, f'이미 일정에 등록되어 있습니다.'
         elif active and not is_include:
             result = self.jobaider.add_schedule(job_id)
             data = '일정에 등록했습니다.' if result else '일정에 등록하지 못했어요.'
         elif not active and is_include:
-            result, data = F.scheduler.remove_job(schedule_id), '일정에서 제외했습니다.'
+            result, data = FRAMEWORK.scheduler.remove_job(schedule_id), '일정에서 제외했습니다.'
         else:
             result, data = False, '등록되지 않은 일정입니다.'
         return result, data

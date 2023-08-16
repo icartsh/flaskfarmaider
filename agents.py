@@ -188,11 +188,11 @@ class PluginAgent(Agent):
         '''config: dict | AgentConfig, name: str = None'''
         super().__init__(config, name=name)
         from framework.init_main import Framework # type: ignore
-        self.F = Framework.get_instance()
+        self.FRAMEWORK = Framework.get_instance()
 
     def get_plugin(self, name):
         '''name: str -> PluginBase'''
-        return self.F.PluginManager.get_plugin_instance(name)
+        return self.FRAMEWORK.PluginManager.get_plugin_instance(name)
 
     def get_module(self, plugin, module):
         '''plugin: str, module: str -> PluginModuleBase'''
@@ -205,7 +205,7 @@ class PlexmateAgent(PluginAgent):
     def __init__(self, config):
         '''config: dict | AgentConfig'''
         super().__init__(config, name='agent.plexmate')
-        self.P = self.get_plugin('plex_mate')
+        self.PLUGIN = self.get_plugin('plex_mate')
         # --dirs 옵션 우선
         if not self.targets and hasattr(self.config.args, 'sections'):
             self.targets = []
@@ -223,8 +223,8 @@ class PlexmateAgent(PluginAgent):
             }
         )
         self.plex = {
-            'url': self.P.ModelSetting.get('base_url'),
-            'token': self.P.ModelSetting.get('base_token'),
+            'url': self.PLUGIN.ModelSetting.get('base_url'),
+            'token': self.PLUGIN.ModelSetting.get('base_token'),
             'refresh_url': '%s/library/sections/%d/refresh?X-Plex-Token=%s',
             'db': self.get_plugin('plex_mate').PlexDBHandle,
         }
@@ -240,7 +240,7 @@ class PlexmateAgent(PluginAgent):
 
     def get_module(self, module):
         '''module: str -> PluginModuleBase'''
-        return self.P.logic.get_module(module)
+        return self.PLUGIN.logic.get_module(module)
 
     def get_scan_model(self):
         '''None -> ModelScanItem'''
@@ -640,7 +640,7 @@ class InitAgent(PluginAgent):
     def __init__(self, config, name=None):
         '''config: dict, name: str = None'''
         super().__init__(config, name=name)
-        self.plugins_installed = [plugin_name for plugin_name in self.F.PluginManager.all_package_list.keys()]
+        self.plugins_installed = [plugin_name for plugin_name in self.FRAMEWORK.PluginManager.all_package_list.keys()]
 
     def get_installed_plugins(self):
         '''None -> dict[str, dict]'''
@@ -791,7 +791,7 @@ class UbuntuAgent(InitAgent):
                 self.logger.info(self.journal(f'실행 결과 {command}: {msg}'))
 
             for plugin in require_plugins:
-                result = self.F.PluginManager.plugin_install(self.config.init.dependencies.get(plugin, {"repo": "NO INFO."}).get("repo"))
+                result = self.FRAMEWORK.PluginManager.plugin_install(self.config.init.dependencies.get(plugin, {"repo": "NO INFO."}).get("repo"))
                 self.logger.info(result.get('msg'))
         else:
             self.logger.error(self.journal(f'실행이 허용되지 않도록 설정되어 있어요.'))
