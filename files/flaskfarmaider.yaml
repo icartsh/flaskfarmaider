@@ -116,3 +116,7 @@ dependencies:
     repo: 'https://github.com/ssagajikorea/narrtv'
   cooltv:
     repo: 'https://github.com/ssagajikorea/cooltv'
+  flaskfarmaider:
+    repo: 'https://github.com/halfaider/flaskfarmaider'
+    plugins:
+      - plex_mate

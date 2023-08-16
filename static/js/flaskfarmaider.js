@@ -407,7 +407,7 @@ function disabled_by_scan_mode(mode) {
 
 function set_clear_section(type) {
     E_CLEAR_SECTION.html('');
-    if (['movie', 'show', 'music'].includes(type)) {
+    if (SECTIONS[type]) {
         SECTIONS[type].forEach(function(item) {
             E_CLEAR_SECTION.append(
                 $('<option></option>').prop('value', item.id).html(item.name)
@@ -416,6 +416,7 @@ function set_clear_section(type) {
     } else {
         console.error('type: ' + type);
         console.error(SECTIONS);
+        notify('라이브러리 섹션 정보가 없습니다.', 'warning');
     }
 }
 
