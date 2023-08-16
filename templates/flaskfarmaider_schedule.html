@@ -14,15 +14,15 @@
                 [ TASK_KEYS[4], TASKS[TASK_KEYS[4]]['name'] ],
                 [ TASK_KEYS[5], TASKS[TASK_KEYS[5]]['name'] ],
             ],
-            desc=None
+            desc='일정으로 등록할 작업'
         )
     }}
-    {{ macros.setting_input_text('sch-description', '설명') }}
+    {{ macros.setting_input_text('sch-description', '설명', desc='일정 목록에 표시될 제목') }}
     {{ macros.m_hr() }}
-    {{ macros.setting_input_text('sch-target-path', '로컬 경로', desc=['Flaskfarm에서 접근 가능한 로컬 경로']) }}
+    {{ macros.setting_input_text('sch-target-path', '로컬 경로', desc=['새로고침/스캔 할 경로','Flaskfarm에서 접근 가능한 로컬 경로']) }}
     {{ macros.m_hr() }}
-    {{ macros.setting_input_text('sch-vfs', 'VFS 리모트', desc=['ex. gds:'], col='5') }}
-    {{ macros.setting_checkbox('sch-recursive', 'recursive', desc='--recursive 옵션 적용 여부') }}
+    {{ macros.setting_input_text('sch-vfs', 'VFS 리모트', desc=['rclone rc로 접근 가능한 리모트 이름', 'ex. gds:'], col='5') }}
+    {{ macros.setting_checkbox('sch-recursive', 'recursive', desc='rclone refresh의 --recursive 옵션 적용 여부') }}
     {{ macros.m_hr() }}
     {{ macros.setting_radio_with_value(
         'sch-scan-mode',
@@ -35,38 +35,38 @@
     ) }}
     {{ macros.setting_select(
             'sch-scan-mode-periodic-id',
-            '주기적 스캔',
+            '주기적 스캔 작업',
             [],
-            desc='주기적 스캔 작업'
+            desc='Plexmate 플러그인의 주기적 스캔 작업 목록',
         )
     }}
     {{ macros.m_hr() }}
     {{ macros.setting_select(
             'sch-clear-type',
-            '라이브러리 타입',
+            '파일 정리 유형',
             [
                 ['movie', '영화'],
                 ['show', 'TV'],
                 ['music', '음악'],
             ],
             col='3',
-            desc=None
+            desc='파일 정리할 라이브러리의 유형'
         )
     }}
     {{ macros.setting_select(
             'sch-clear-level',
-            '정리 단계',
+            '파일 정리 단계',
             [],
             col='3',
-            desc=None
+            desc='Plexmate 파일 정리 단계'
         )
     }}
     {{ macros.setting_select(
             'sch-clear-section',
-            '섹션',
+            '파일 정리 섹션',
             [],
             col='5',
-            desc=None
+            desc='파일 정리할 라이브러리 섹션'
         )
     }}
     {{ macros.m_hr() }}
@@ -79,7 +79,7 @@
             [FF_SCHEDULE_KEYS[2], FF_SCHEDULES[FF_SCHEDULE_KEYS[2]]['name']],
         ]
     ) }}
-    {{ macros.setting_input_text('sch-schedule-interval', '시간 간격', desc=['Interval(minute 단위)이나 Cron 설정'], col='5') }}
+    {{ macros.setting_input_text('sch-schedule-interval', '시간 간격', desc=['Interval(minute 단위) 혹은 Cron 설정'], col='5') }}
     {{ macros.setting_checkbox('sch-schedule-auto-start', '시작시 일정 등록', desc=None) }}
 
 </form>
@@ -219,25 +219,6 @@
         // 일정 저장 버튼
         E_SAVE_BTN.on('click', function() {
             id = $(this).data('id');
-            /*
-            if ($('#sch-task').prop('value') != TASK_KEYS[2] && $('#sch-task').prop('value') != TASK_KEYS[4]){
-                if ($('#sch-target-path').prop('value') == '') {
-                    if ($('#sch-task').prop('value') == TASK_KEYS[6]) {
-                        notify('로컬 경로란에 주기적 스캔 항목의 ID를 입력해 주세요.', 'warning');
-                    } else {
-                        notify('로컬 경로를 입력해 주세요.', 'warning');
-                    }
-                    $('#sch-target-path').focus();
-                    return false;
-                }
-            }
-            */
-            if (E_SCH_RADIO_2.prop('checked') && E_INTERVAL.prop('value') == '') {
-                notify('시간 간격을 입력해 주세요.', 'warning');
-                E_INTERVAL.focus();
-                return false;
-            }
-
             formdata = getFormdata('#sch-setting');
             formdata += '&id=' + id;
             globalSendCommand('save', formdata, null, null, function(result) {

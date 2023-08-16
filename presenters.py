@@ -19,6 +19,7 @@ class BaseModule(PluginModuleBase):
     def __init__(self, P, first_menu: str = None, name: str = None, scheduler_desc: str = None) -> None:
         super(BaseModule, self).__init__(P, name=name, scheduler_desc=scheduler_desc)
         self.db_default = {}
+        self.plexmate = F.PluginManager.get_plugin_instance('plex_mate')
 
     def pre_rendering(func: Callable) -> Callable:
         def wrapper(self, *args: Any, **kwargs: Any) -> Any:
@@ -45,14 +46,13 @@ class BaseModule(PluginModuleBase):
                 pass
             args = P.ModelSetting.to_dict()
 
-            plexmate = F.PluginManager.get_plugin_instance('plex_mate')
-            if plexmate:
+            if self.plexmate:
                 periodics = []
-                jobs = plexmate.logic.get_module('periodic').get_jobs()
+                jobs = self.plexmate.logic.get_module('periodic').get_jobs()
                 for job in jobs:
                     idx = int(job['job_id'].replace('plex_mate_periodic_', '')) + 1
                     section = job.get('섹션ID', -1)
-                    section_data = plexmate.PlexDBHandle.library_section(section)
+                    section_data = self.plexmate.PlexDBHandle.library_section(section)
                     if section_data:
                         name = section_data.get('name')
                     else:
@@ -61,11 +61,15 @@ class BaseModule(PluginModuleBase):
                     periodics.append({'idx': idx, 'section': section, 'name': name, 'desc': job.get('설명', '')})
                 args['periodics'] = periodics
                 sections = {
-                    'movie': plexmate.PlexDBHandle.library_sections(section_type=1),
-                    'show': plexmate.PlexDBHandle.library_sections(section_type=2),
-                    'music': plexmate.PlexDBHandle.library_sections(section_type=8),
+                    'movie': self.plexmate.PlexDBHandle.library_sections(section_type=1),
+                    'show': self.plexmate.PlexDBHandle.library_sections(section_type=2),
+                    'music': self.plexmate.PlexDBHandle.library_sections(section_type=8),
                 }
                 args['sections'] = sections
+            else:
+                P.logger.warning(f'plex_mate 플러그인을 찾을 수 없습니다.')
+                args['periodics'] = []
+                args['sections'] = {'movie': [], 'show': [], 'music': []}
             args['module_name'] = self.name
             args['task_keys'] = TASK_KEYS
             args['tasks'] = TASKS

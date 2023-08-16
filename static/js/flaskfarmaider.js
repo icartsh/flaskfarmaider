@@ -407,22 +407,21 @@ function disabled_by_scan_mode(mode) {
 
 function set_clear_section(type) {
     E_CLEAR_SECTION.html('');
-    if (type == null) {
-        type = 'movie';
+    if (['movie', 'show', 'music'].includes(type)) {
+        SECTIONS[type].forEach(function(item) {
+            E_CLEAR_SECTION.append(
+                $('<option></option>').prop('value', item.id).html(item.name)
+            )
+        });
+    } else {
+        console.error('type: ' + type);
+        console.error(SECTIONS);
     }
-    SECTIONS[type].forEach(function(item, index) {
-        E_CLEAR_SECTION.append(
-            $('<option></option>').prop('value', item.id).html(item.name)
-        )
-    });
 }
 
 function set_clear_level(type) {
     E_CLEAR_LEVEL.html('');
     E_CLEAR_LEVEL.append($('<option></option>').prop('value', 'start1').html('1단계'));
-    if (type == null) {
-        type = 'movie';
-    }
     switch(type) {
         case 'movie':
         case 'show':
@@ -462,7 +461,6 @@ function schedule_modal(from, data) {
         $('input:radio[name="sch-schedule-mode"][value="' + data.schedule_mode + '"]').prop('checked', true);
         disabled_by_schedule_mode(data.schedule_mode);
         E_INTERVAL.prop('value', data.schedule_interval);
-        console.log((data.schedule_auto_start) ? 'on' : 'off');
         E_SCH_AUTO.bootstrapToggle((data.schedule_auto_start) ? 'on' : 'off');
         E_MODAL_TITLE.html('일정 편집 - ' + data.id);
         E_CLEAR_TYPE.prop('value', data.clear_type);

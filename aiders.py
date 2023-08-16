@@ -40,6 +40,7 @@ class JobAider(Aider):
 
     def __init__(self):
         super().__init__()
+        self.plexmate = F.PluginManager.get_plugin_instance('plex_mate')
 
     def handle(self, job: Job | dict[str, Any]):
         if isinstance(job, Job):
@@ -147,7 +148,10 @@ class JobAider(Aider):
         elif task == TASK_KEYS[5]:
             agent = UbuntuAgent(brief)
         else:
-            agent = PlexmateAgent(brief)
+            if self.plexmate:
+                agent = PlexmateAgent(brief)
+            else:
+                raise Exception('plex_mate 플러그인을 찾을 수 없습니다.')
 
         return agent
 
