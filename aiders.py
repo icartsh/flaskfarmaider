@@ -1,7 +1,6 @@
 import os
 from pathlib import Path
 from datetime import datetime
-from threading import Thread
 from typing import Any
 import traceback
 import shutil
@@ -112,7 +111,6 @@ class JobAider(Aider):
                 'timeout': int(PLUGIN.ModelSetting.get(f'{SETTING}_startup_timeout')),
                 'dependencies': yaml.safe_load(SettingAider.depends()).get('dependencies'),
             },
-            'ff_config': FRAMEWORK.config['config_filepath'],
             'plexmate': {
                 'max_scan_time': int(PLUGIN.ModelSetting.get(f'{SETTING}_plexmate_max_scan_time')),
                 'timeover_range': PLUGIN.ModelSetting.get(f'{SETTING}_plexmate_timeover_range'),
