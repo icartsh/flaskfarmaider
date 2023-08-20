@@ -55,49 +55,9 @@ class AgentConfig(dict):
 
 class Agent:
 
-    name = None
-    logger = None
-    journals = []
-    config = AgentConfig(
-        {
-            'log': {
-                'level': 'INFO',
-                'logger': None
-            },
-            'rclone': {
-                'rc_addr': 'http://172.17.0.1:5572',
-                'rc_user': '',
-                'rc_pass': '',
-                'rc_mapping': {}
-            },
-            'plexmate': {
-                'max_scan_time': 10,
-                'timeover_range': '0~0',
-                'plex_mapping': {}
-            },
-            'init': {
-                'execute_commands': False,
-                'commands': [],
-                'timeout': 100,
-                'dependencies': {}
-            },
-            'args': {
-                'command': '',
-                'dirs': [],
-                'fs': '',
-                'recursive': False,
-                'periodic_id': -1,
-                'scan_mode': '',
-                'clear_type': '',
-                'clear_level': '',
-                'clear_section': -1,
-            }
-        }
-    )
-
     def __init__(self, config: dict = None, name: str = None):
         self.name = name
-        if config: self.set_config(config)
+        self.config = self.set_config(config)
         if self.config.log.logger:
             self.logger = self.config.log.logger
         else:
@@ -108,18 +68,56 @@ class Agent:
         self.operations = {
             'default': self.operation_default
         }
+        self.journals = []
 
     def journal(self, msg: str) -> str:
         self.journals.append(msg)
         return msg
 
-    def set_config(self, config: dict) -> None:
+    def set_config(self, config: dict) -> AgentConfig:
+        default_config = AgentConfig(
+            {
+                'log': {
+                    'level': 'INFO',
+                    'logger': None
+                },
+                'rclone': {
+                    'rc_addr': 'http://172.17.0.1:5572',
+                    'rc_user': '',
+                    'rc_pass': '',
+                    'rc_mapping': {}
+                },
+                'plexmate': {
+                    'max_scan_time': 10,
+                    'timeover_range': '0~0',
+                    'plex_mapping': {}
+                },
+                'init': {
+                    'execute_commands': False,
+                    'commands': [],
+                    'timeout': 100,
+                    'dependencies': {}
+                },
+                'args': {
+                    'command': '',
+                    'dirs': [],
+                    'fs': '',
+                    'recursive': False,
+                    'periodic_id': -1,
+                    'scan_mode': '',
+                    'clear_type': '',
+                    'clear_level': '',
+                    'clear_section': -1,
+                }
+            }
+        )
         if 'args' in config:
             if config['args'].get('dirs'):
                 self.targets = config['args']['dirs']
             else:
                 self.targets = None
-        self.config.update(config)
+        default_config.update(config)
+        return default_config
 
     def request(self, url: str, method: str = 'POST', data: dict = None, **kwargs: Any) -> Response:
         try:
@@ -428,8 +426,6 @@ class PlexmateAgent(PluginAgent):
 
 class RcloneAgent(Agent):
 
-    vfses = None
-
     def __init__(self, config: dict):
         super().__init__(config, name='agent.rclone')
         self.operations.update(
@@ -443,6 +439,8 @@ class RcloneAgent(Agent):
             self.config.args.recursive = False
         if not hasattr(self.config.args, 'fs') or self.config.args.fs is None:
             self.config.args.fs = self.vfses[0]
+        else:
+            self.vfses = None
 
     def check_connection(self) -> bool:
         response = self.command('core/version')
@@ -581,28 +579,10 @@ class RcloneAgent(Agent):
 
 class InitAgent(PluginAgent):
 
-    plugins_installed = None
-    plugins_dir = None
-
     def __init__(self, config: dict, name: str = None):
         '''config: dict, name: str = None'''
         super().__init__(config, name=name)
         self.plugins_installed = [plugin_name for plugin_name in self.FRAMEWORK.PluginManager.all_package_list.keys()]
-
-    def get_installed_plugins(self) -> dict[str, dict]:
-        plugins_installed = {}
-        for dir in os.listdir(self.plugins_dir):
-            try:
-                info_file = f'{self.plugins_dir}/{dir}/info.yaml'
-                with open(info_file, "r") as stream:
-                    try:
-                        plugins_installed[dir] = yaml.safe_load(stream)
-                    except yaml.YAMLError as ye:
-                        self.logger.error(self.journal(str(ye)))
-            except FileNotFoundError as fnfe:
-                self.logger.error(self.journal(f'{fnfe}: {info_file}'))
-                continue
-        return plugins_installed
 
     def check_command(self, *args: tuple[str]) -> bool:
         return True if self.sub_run(*args).returncode == 0 else False

@@ -44,27 +44,28 @@ class BaseModule(PluginModuleBase):
             except Exception as e:
                 pass
             args = PLUGIN.ModelSetting.to_dict()
-
-            plexmate = PLUGIN.get_plex_mate()
             periodics = []
-            jobs = plexmate.logic.get_module('periodic').get_jobs()
-            for job in jobs:
-                idx = int(job['job_id'].replace('plex_mate_periodic_', '')) + 1
-                section = job.get('섹션ID', -1)
-                section_data = plexmate.PlexDBHandle.library_section(section)
-                if section_data:
-                    name = section_data.get('name')
-                else:
-                    LOGGER.debug(f'skip nonexistent section: {section}')
-                    continue
-                periodics.append({'idx': idx, 'section': section, 'name': name, 'desc': job.get('설명', '')})
+            sections = {'movie': '', 'show': '', 'music': ''}
+            plexmate = PLUGIN.get_plex_mate()
+            if plexmate:
+                jobs = plexmate.logic.get_module('periodic').get_jobs()
+                for job in jobs:
+                    idx = int(job['job_id'].replace('plex_mate_periodic_', '')) + 1
+                    section = job.get('섹션ID', -1)
+                    section_data = plexmate.PlexDBHandle.library_section(section)
+                    if section_data:
+                        name = section_data.get('name')
+                    else:
+                        LOGGER.debug(f'skip nonexistent section: {section}')
+                        continue
+                    periodics.append({'idx': idx, 'section': section, 'name': name, 'desc': job.get('설명', '')})
+                sections = {
+                    'movie': plexmate.PlexDBHandle.library_sections(section_type=1),
+                    'show': plexmate.PlexDBHandle.library_sections(section_type=2),
+                    'music': plexmate.PlexDBHandle.library_sections(section_type=8),
+                }
             args['periodics'] = periodics
-            args['sections'] = {
-                'movie': plexmate.PlexDBHandle.library_sections(section_type=1),
-                'show': plexmate.PlexDBHandle.library_sections(section_type=2),
-                'music': plexmate.PlexDBHandle.library_sections(section_type=8),
-            }
-
+            args['sections'] = sections
             args['module_name'] = self.name
             args['task_keys'] = TASK_KEYS
             args['tasks'] = TASKS
@@ -115,6 +116,8 @@ class Setting(BaseModule):
                 connection.row_factory = sqlite3.Row
                 cs = connection.cursor()
                 table_jobs = f'{__package__}_jobs'
+                LOGGER.debug(f'vacuum db')
+                cs.execute(f'VACUUM;').fetchall()
                 if current_db_ver == '1':
                     LOGGER.debug('start migration from 1 to 2...')
                     # check old table
