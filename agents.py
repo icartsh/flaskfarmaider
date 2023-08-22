@@ -519,7 +519,7 @@ class RcloneAgent(Agent):
 
     def is_successful(self, response: Response) -> tuple[bool, str]:
         if not str(response.status_code).startswith('2'):
-            return False, f'status code: {response.status_code}'
+            return False, f'status code: {response.status_code}, content: {response.text}'
         try:
             # {'error': '', ...}
             # {'result': {'/path/to': 'Invalid...'}}
