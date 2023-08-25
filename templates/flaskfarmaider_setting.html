@@ -58,35 +58,9 @@
 </form>
 
 <script type="text/javascript">
-
-    $("body").on('click', '#btn_test_connection_rclone', function (e) {
-        e.preventDefault();
-        ret = globalSendCommand(
-            'command_test_connection',
-            $('#{{ module_name }}_rclone_remote_addr').prop('value').trim(),
-            $('#{{ module_name }}_rclone_remote_user').prop('value').trim(),
-            $('#{{ module_name }}_rclone_remote_pass').prop('value').trim(),
-            callback_test_connection
-        );
+    $(function() {
+        init_setting();
     });
-
-    function callback_test_connection(result) {
-        switch (result.ret) {
-            case 'success':
-                console.log('Connection success');
-                $('#btn_test_connection_rclone').text('접속 성공');
-                //$('#btn_test_connection_rclone').attr('disabled', true);
-                console.log(result.vfses[0]);
-                $("#{{ module_name + '_rclone_remote_vfs' }}").prop('value', result.vfses[0]);
-                break;
-            case 'failed': arguments
-                console.log('Connection failed');
-                $('#btn_test_connection_rclone').text('접속 실패');
-                break;
-            default:
-                console.log('Connection returns : ${result.ret}');
-        }
-    }
 </script>
 
 {% endblock %}

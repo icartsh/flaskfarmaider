@@ -5,22 +5,21 @@ var SCH_FORM_GROUP_TASK = build_sch_form_group('sch-form-group-task', [SCH_FORM_
 var SCH_FORM_PATH = build_sch_form_text('sch-target-path', '로컬 경로', '', 9, '새로고침/스캔 할 경로<br>Flaskfarm에서 접근 가능한 로컬 경로');
 var SCH_FORM_GROUP_PATH = build_sch_form_group('sch-form-group-path', [SCH_FORM_PATH, SCH_FORM_LINE]);
 var SCH_FORM_VFS = build_sch_form_text('sch-vfs', 'VFS 리모트', '', 5, 'rclone rc로 접근 가능한 리모트 이름<br>ex. gds:');
-var SCH_FORM_RECURSIVE = build_sch_form_checkbox('sch-recursive', 'recursive', 'off', 5, 'rclone refresh의 --recursive 옵션 적용 여부');
+var SCH_FORM_RECURSIVE = build_sch_form_checkbox('sch-recursive', 'recursive', 'off', 9, 'rclone refresh의 --recursive 옵션 적용 여부');
 var SCH_FORM_GROUP_RCLONE = build_sch_form_group('sch-form-group-rclone', [SCH_FORM_VFS, SCH_FORM_RECURSIVE, SCH_FORM_LINE]);
-var SCH_FORM_SCAN_TYPE = build_sch_form_radio('sch-scan-mode', '스캔 방식', SCAN_OPTS, 5, '');
+var SCH_FORM_SCAN_TYPE = build_sch_form_radio('sch-scan-mode', '스캔 방식', SCAN_OPTS, 9, '');
 var SCH_FORM_SCAN_PERIODIC = build_sch_form_select('sch-scan-mode-periodic-id', '주기적 스캔 작업', [], 9, 'Plexmate 플러그인의 주기적 스캔 작업 목록')
 var SCH_FORM_GROUP_SCAN = build_sch_form_group('sch-form-group-scan', [SCH_FORM_SCAN_TYPE, SCH_FORM_SCAN_PERIODIC, SCH_FORM_LINE]);
-var SCH_FORM_CLEAR_TYPE = build_sch_form_radio('sch-clear-type', '파일 정리 유형', CLEAR_OPTS, 3, '파일 정리할 라이브러리의 유형')
+var SCH_FORM_CLEAR_TYPE = build_sch_form_radio('sch-clear-type', '파일 정리 유형', CLEAR_OPTS, 9, '파일 정리할 라이브러리의 유형')
 var SCH_FORM_CLEAR_LEVEL = build_sch_form_select('sch-clear-level', '파일 정리 단계', [], 3, 'Plexmate 파일 정리 단계')
 var SCH_FORM_CLEAR_SECTION = build_sch_form_select('sch-clear-section', '파일 정리 섹션', [], 5, '파일 정리할 라이브러리 섹션')
 var SCH_FORM_GROUP_CLEAR = build_sch_form_group('sch-form-group-clear', [SCH_FORM_CLEAR_TYPE, SCH_FORM_CLEAR_LEVEL, SCH_FORM_CLEAR_SECTION, SCH_FORM_LINE]);
-var SCH_FORM_SCH_MODE = build_sch_form_radio('sch-schedule-mode', '일정 방식', SCHEDULE_OPTS, 5, '')
+var SCH_FORM_SCH_MODE = build_sch_form_radio('sch-schedule-mode', '일정 방식', SCHEDULE_OPTS, 9, '')
 var SCH_FORM_SCH_INTERVAL = build_sch_form_text('sch-schedule-interval', '시간 간격', '', 5, 'Interval(minute 단위) 혹은 Cron 설정');
-var SCH_FORM_SCH_AUTO = build_sch_form_checkbox('sch-schedule-auto-start', '시작시 일정 등록', 'off', 5, '');
+var SCH_FORM_SCH_AUTO = build_sch_form_checkbox('sch-schedule-auto-start', '시작시 일정 등록', 'off', 9, '');
 var SCH_FORM_GROUP_SCH = build_sch_form_group('sch-form-group-sch', [SCH_FORM_SCH_MODE, SCH_FORM_SCH_INTERVAL, SCH_FORM_SCH_AUTO, SCH_FORM_LINE]);
 
-// elements
-function set_elements() {
+function init_schedule() {
     E_SCH_SETTING = $('#sch-setting');
     E_SCH_SETTING.append(SCH_FORM_GROUP_TASK);
     E_TASK = $('#sch-task');
@@ -131,16 +130,54 @@ function set_elements() {
             $('<option></option>').prop('value', item.idx).html(item.idx + '. ' + item.name + ' : ' + item.desc)
         );
     });
+    // 초기 일정 불러오기
+    // f'{order}|{page}|{search}|{option1}|{option2}')
+    if (LAST_LIST_OPTIONS.length == 5) {
+        E_GLOBAL_SEARCH_ORDER.prop('value', LAST_LIST_OPTIONS[0]);
+        E_GLOBAL_SEARCH_KEYWORD.prop('value', LAST_LIST_OPTIONS[2]);
+        E_GLOBAL_SEARCH_OPTION1.prop('value', LAST_LIST_OPTIONS[3]);
+        E_GLOBAL_SEARCH_OPTION2.prop('value', LAST_LIST_OPTIONS[4]);
+        globalRequestSearch(LAST_LIST_OPTIONS[1]);
+    } else {
+        globalRequestSearch('1');
+    }
+    // 초기 디렉토리 불러오기
+    browser_command({
+        command: 'list',
+        path: E_BROWSER_WD.prop('value'),
+        recursive: false,
+        scan_mode: SCAN_MODE_KEYS[0],
+    });
 }
 
-function split_by_newline(text) {
-    if (text != null){
-        result = text.split("\n").map(function(item) {
-            return item.trim();
-        });
-        return result;
-    } else {
-        return text;
+function init_setting() {
+    $("body").on('click', '#btn_test_connection_rclone', function (e) {
+        e.preventDefault();
+        ret = globalSendCommand(
+            'command_test_connection',
+            $('#{{ module_name }}_rclone_remote_addr').prop('value').trim(),
+            $('#{{ module_name }}_rclone_remote_user').prop('value').trim(),
+            $('#{{ module_name }}_rclone_remote_pass').prop('value').trim(),
+            callback_test_connection
+        );
+    });
+
+    function callback_test_connection(result) {
+        switch (result.ret) {
+            case 'success':
+                console.log('Connection success');
+                $('#btn_test_connection_rclone').text('접속 성공');
+                //$('#btn_test_connection_rclone').attr('disabled', true);
+                console.log(result.vfses[0]);
+                $("#{{ module_name + '_rclone_remote_vfs' }}").prop('value', result.vfses[0]);
+                break;
+            case 'failed': arguments
+                console.log('Connection failed');
+                $('#btn_test_connection_rclone').text('접속 실패');
+                break;
+            default:
+                console.log('Connection returns : ${result.ret}');
+        }
     }
 }
 
@@ -545,7 +582,7 @@ function bulid_sch_form_header(title, col) {
     element = '<div class="row" style="padding-top: 10px; padding-bottom:10px; align-items: center;"><div class="col-sm-3 set-left">';
     element += '<strong>' + title + '</strong></div>';
     element += '<div class="col-sm-9">';
-    element += '<div class="input-group py-1 col-sm-' + col + '">';
+    element += '<div class="input-group col-sm-' + col + '">';
     return element;
 }
 

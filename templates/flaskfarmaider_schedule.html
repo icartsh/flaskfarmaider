@@ -82,26 +82,7 @@
 
 <script type="text/javascript">
     $(function() {
-        // elements
-        set_elements();
-        // 초기 일정 불러오기
-        // f'{order}|{page}|{search}|{option1}|{option2}')
-        if (LAST_LIST_OPTIONS.length == 5) {
-            E_GLOBAL_SEARCH_ORDER.prop('value', LAST_LIST_OPTIONS[0]);
-            E_GLOBAL_SEARCH_KEYWORD.prop('value', LAST_LIST_OPTIONS[2]);
-            E_GLOBAL_SEARCH_OPTION1.prop('value', LAST_LIST_OPTIONS[3]);
-            E_GLOBAL_SEARCH_OPTION2.prop('value', LAST_LIST_OPTIONS[4]);
-            globalRequestSearch(LAST_LIST_OPTIONS[1]);
-        } else {
-            globalRequestSearch('1');
-        }
-        // 초기 디렉토리 불러오기
-        browser_command({
-            command: 'list',
-            path: E_BROWSER_WD.prop('value'),
-            recursive: false,
-            scan_mode: SCAN_MODE_KEYS[0],
-        });
+        init_schedule();
     });
 </script>
 
