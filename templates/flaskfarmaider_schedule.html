@@ -1,94 +1,12 @@
 {% extends 'flaskfarmaider.html' %}
 {% block content %}
-
 {{ macros.m_modal_start('sch-add-modal', '일정 추가', 'modal-lg') }}
-<form id='sch-setting'>
-    {{ macros.setting_select(
-            'sch-task',
-            '작업',
-            [
-                [ TASK_KEYS[0], TASKS[TASK_KEYS[0]]['name'] ],
-                [ TASK_KEYS[1], TASKS[TASK_KEYS[1]]['name'] ],
-                [ TASK_KEYS[2], TASKS[TASK_KEYS[2]]['name'] ],
-                [ TASK_KEYS[3], TASKS[TASK_KEYS[3]]['name'] ],
-                [ TASK_KEYS[4], TASKS[TASK_KEYS[4]]['name'] ],
-                [ TASK_KEYS[5], TASKS[TASK_KEYS[5]]['name'] ],
-            ],
-            desc='일정으로 등록할 작업'
-        )
-    }}
-    {{ macros.setting_input_text('sch-description', '설명', desc='일정 목록에 표시될 제목') }}
-    {{ macros.m_hr() }}
-    {{ macros.setting_input_text('sch-target-path', '로컬 경로', desc=['새로고침/스캔 할 경로','Flaskfarm에서 접근 가능한 로컬 경로']) }}
-    {{ macros.m_hr() }}
-    {{ macros.setting_input_text('sch-vfs', 'VFS 리모트', desc=['rclone rc로 접근 가능한 리모트 이름', 'ex. gds:'], col='5') }}
-    {{ macros.setting_checkbox('sch-recursive', 'recursive', desc='rclone refresh의 --recursive 옵션 적용 여부') }}
-    {{ macros.m_hr() }}
-    {{ macros.setting_radio_with_value(
-        'sch-scan-mode',
-        '스캔 방식',
-        [
-            [SCAN_MODE_KEYS[0], SCAN_MODES[SCAN_MODE_KEYS[0]]['name']],
-            [SCAN_MODE_KEYS[1], SCAN_MODES[SCAN_MODE_KEYS[1]]['name']],
-            [SCAN_MODE_KEYS[2], SCAN_MODES[SCAN_MODE_KEYS[2]]['name']],
-        ]
-    ) }}
-    {{ macros.setting_select(
-            'sch-scan-mode-periodic-id',
-            '주기적 스캔 작업',
-            [],
-            desc='Plexmate 플러그인의 주기적 스캔 작업 목록',
-        )
-    }}
-    {{ macros.m_hr() }}
-    {{ macros.setting_select(
-            'sch-clear-type',
-            '파일 정리 유형',
-            [
-                ['movie', '영화'],
-                ['show', 'TV'],
-                ['music', '음악'],
-            ],
-            col='3',
-            desc='파일 정리할 라이브러리의 유형'
-        )
-    }}
-    {{ macros.setting_select(
-            'sch-clear-level',
-            '파일 정리 단계',
-            [],
-            col='3',
-            desc='Plexmate 파일 정리 단계'
-        )
-    }}
-    {{ macros.setting_select(
-            'sch-clear-section',
-            '파일 정리 섹션',
-            [],
-            col='5',
-            desc='파일 정리할 라이브러리 섹션'
-        )
-    }}
-    {{ macros.m_hr() }}
-    {{ macros.setting_radio_with_value(
-        'sch-schedule-mode',
-        '일정 방식',
-        [
-            [FF_SCHEDULE_KEYS[0], FF_SCHEDULES[FF_SCHEDULE_KEYS[0]]['name']],
-            [FF_SCHEDULE_KEYS[1], FF_SCHEDULES[FF_SCHEDULE_KEYS[1]]['name']],
-            [FF_SCHEDULE_KEYS[2], FF_SCHEDULES[FF_SCHEDULE_KEYS[2]]['name']],
-        ]
-    ) }}
-    {{ macros.setting_input_text('sch-schedule-interval', '시간 간격', desc=['Interval(minute 단위) 혹은 Cron 설정'], col='5') }}
-    {{ macros.setting_checkbox('sch-schedule-auto-start', '시작시 일정 등록', desc=None) }}
-
-</form>
+<form id='sch-setting'></form>
 {{ macros.m_modal_end_with_button(
   [
     ['sch-save-btn', '일정 저장'],
   ]
 ) }}
-
 <form id="form_search">
     <div class="input-group mb-3">
         <div class="input-group-prepend w-25">
@@ -163,11 +81,9 @@
 </table>
 
 <script type="text/javascript">
-
     $(function() {
         // elements
         set_elements();
-
         // 초기 일정 불러오기
         // f'{order}|{page}|{search}|{option1}|{option2}')
         if (LAST_LIST_OPTIONS.length == 5) {
@@ -179,7 +95,6 @@
         } else {
             globalRequestSearch('1');
         }
-
         // 초기 디렉토리 불러오기
         browser_command({
             command: 'list',
@@ -187,75 +102,7 @@
             recursive: false,
             scan_mode: SCAN_MODE_KEYS[0],
         });
-
-        // 일정 추가 버튼
-        E_ADD_BTN.on('click', function(e) {
-            e.preventDefault();
-            schedule_modal('new', '');
-        });
-
-        // 일정 업무 선택에 따라 inputs (비)활성화
-        E_TASK.change(function() {
-            disabled_by_task($(this).prop('value'));
-        });
-
-        // 일정 방식 선택에 따라 inputs (비)활성화
-        $('input[id^="sch-schedule-mode"][type="radio"]').change(function() {
-            E_SCH_AUTO.bootstrapToggle('off');
-            disabled_by_schedule_mode($(this).prop('value'));
-        });
-
-        // 스캔 방식에 따라 inputs (비)활성화
-        $('input[id^="sch-scan-mode"][type="radio"]').change(function() {
-            disabled_by_scan_mode($(this).prop('value'));
-        });
-
-        // 라이브러리 타입에 따라 목록 변경
-        E_CLEAR_TYPE.change(function() {
-            set_clear_section($(this).prop('value'));
-            set_clear_level($(this).prop('value'));
-        })
-
-        // 일정 저장 버튼
-        E_SAVE_BTN.on('click', function() {
-            id = $(this).data('id');
-            formdata = getFormdata('#sch-setting');
-            formdata += '&id=' + id;
-            globalSendCommand('save', formdata, null, null, function(result) {
-                if (result.success) {
-                    E_MODAL.modal('hide');
-                    notify(result.data, 'success');
-                    globalRequestSearch(1);
-                } else {
-                    notify(result.data, 'warning');
-                }
-            });
-        });
-
-        // 브라우저 이동 버튼
-        E_BROWSER_WD_SUBMIT.on('click', function(e) {
-            dir = E_BROWSER_WD.prop('value');
-            browser_command({command: 'list', path: dir});
-        });
-
-        // 검색 inputs
-        E_GLOBAL_SEARCH_KEYWORD.keypress(function(e) {
-            if (e.keyCode && e.keyCode == 13) {
-                E_GLOBAL_SEARCH_BTN.trigger("click");
-                return false;
-            }
-        });
-
-        // 현재 디렉토리
-        E_BROWSER_WD.keypress(function(e) {
-            if (e.keyCode && e.keyCode == 13) {
-                E_BROWSER_WD_SUBMIT.trigger("click");
-                return false;
-            }
-        });
-
     });
-
 </script>
 
 {% endblock %}

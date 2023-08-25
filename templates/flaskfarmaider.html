@@ -14,7 +14,7 @@
 {% block head %}
     <title>{{ get_web_title() }}</title>
     <meta http-equiv="Permissions-Policy" content="interest-cohort=()">
-    <script type="text/javascript" src="{{ url_for('.static', filename='js/flaskfarmaider.js') }}"></script>
+    <link rel="stylesheet" href="{{ url_for('.static', filename='css/flaskfarmaider.css') }}" />
     <script type="text/javascript">
         // assign variables
         var TASKS = JSON.parse('{{ TASKS|tojson }}');
@@ -29,8 +29,32 @@
         var SCAN_MODE_KEYS = JSON.parse('{{ SCAN_MODE_KEYS|tojson }}');
         var PERIODICS = JSON.parse('{{ PERIODICS|tojson }}');
         var SECTIONS = JSON.parse('{{ SECTIONS|tojson }}');
+        var SECTION_TYPES = ['movie', 'show', 'music']
+        var TASK_OPTS = [
+            { value: TASK_KEYS[0], name: TASKS[TASK_KEYS[0]]['name'] },
+            { value: TASK_KEYS[1], name: TASKS[TASK_KEYS[1]]['name'] },
+            { value: TASK_KEYS[2], name: TASKS[TASK_KEYS[2]]['name'] },
+            { value: TASK_KEYS[3], name: TASKS[TASK_KEYS[3]]['name'] },
+            { value: TASK_KEYS[4], name: TASKS[TASK_KEYS[4]]['name'] },
+            { value: TASK_KEYS[5], name: TASKS[TASK_KEYS[5]]['name'] },
+        ]
+        var SCAN_OPTS = [
+            { value: SCAN_MODE_KEYS[0], name: SCAN_MODES[SCAN_MODE_KEYS[0]]['name'] },
+            { value: SCAN_MODE_KEYS[1], name: SCAN_MODES[SCAN_MODE_KEYS[1]]['name'] },
+            { value: SCAN_MODE_KEYS[2], name: SCAN_MODES[SCAN_MODE_KEYS[2]]['name'] },
+        ]
+        var CLEAR_OPTS = [
+            {value: SECTION_TYPES[0], name:'영화'},
+            {value: SECTION_TYPES[1], name:'TV'},
+            {value: SECTION_TYPES[2], name:'음악'},
+        ]
+        var SCHEDULE_OPTS = [
+            { value: FF_SCHEDULE_KEYS[0], name: FF_SCHEDULES[FF_SCHEDULE_KEYS[0]]['name'] },
+            { value: FF_SCHEDULE_KEYS[1], name: FF_SCHEDULES[FF_SCHEDULE_KEYS[1]]['name'] },
+            { value: FF_SCHEDULE_KEYS[2], name: FF_SCHEDULES[FF_SCHEDULE_KEYS[2]]['name'] },
+        ]
     </script>
-    <link rel="stylesheet" href="{{ url_for('.static', filename='css/flaskfarmaider.css') }}" />
+    <script type="text/javascript" src="{{ url_for('.static', filename='js/flaskfarmaider.js') }}"></script>
 {% endblock %}
 {% block content %}
 {% endblock %}

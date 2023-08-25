@@ -58,11 +58,11 @@ class BaseModule(PluginModuleBase):
                     else:
                         LOGGER.debug(f'skip nonexistent section: {section}')
                         continue
-                    periodics.append({'idx': idx, 'section': section, 'name': name, 'desc': job.get('설명', '')})
+                    periodics.append({'idx': idx, 'name': name, 'desc': job.get('설명', '')})
                 sections = {
-                    'movie': plexmate.PlexDBHandle.library_sections(section_type=1),
-                    'show': plexmate.PlexDBHandle.library_sections(section_type=2),
-                    'music': plexmate.PlexDBHandle.library_sections(section_type=8),
+                    'movie': [{'id': item['id'], 'name': item['name']} for item in  plexmate.PlexDBHandle.library_sections(section_type=1)],
+                    'show': [{'id': item['id'], 'name': item['name']} for item in  plexmate.PlexDBHandle.library_sections(section_type=2)],
+                    'music': [{'id': item['id'], 'name': item['name']} for item in  plexmate.PlexDBHandle.library_sections(section_type=8)],
                 }
             args['periodics'] = periodics
             args['sections'] = sections
@@ -269,8 +269,8 @@ class Schedule(BaseModule):
                 result, data = self.jobaider.update(parse_qs(arg1))
             elif command == 'delete':
                 if Job.delete_by_id(arg1):
+                    self.set_schedule(int(arg1), False)
                     result, data = True, f'삭제했습니다: ID {arg1}'
-                    self.set_schedule(arg1, False)
                 else:
                     result, data = False, f'삭제 실패: ID {arg1}'
             elif command == 'execute':
@@ -279,7 +279,7 @@ class Schedule(BaseModule):
                 result, data = True, '실행을 완료했습니다.'
             elif command == 'schedule':
                 active = True if arg2.lower() == 'true' else False
-                result, data = self.set_schedule(arg1, active)
+                result, data = self.set_schedule(int(arg1), active)
             elif command in TASK_KEYS:
                 if arg2:
                     recursive = True if arg2.lower() == 'true' else False
@@ -313,17 +313,22 @@ class Schedule(BaseModule):
             return jsonify({'success': result, 'data': data})
 
     def set_schedule(self, job_id: int | str, active: bool = False) -> tuple[bool, str]:
-        schedule_id = Job.create_schedule_id(int(job_id))
+        schedule_id = Job.create_schedule_id(job_id)
         is_include = FRAMEWORK.scheduler.is_include(schedule_id)
-        if active and is_include:
-            result, data = False, f'이미 일정에 등록되어 있습니다.'
-        elif active and not is_include:
-            result = self.jobaider.add_schedule(job_id)
-            data = '일정에 등록했습니다.' if result else '일정에 등록하지 못했어요.'
-        elif not active and is_include:
-            result, data = FRAMEWORK.scheduler.remove_job(schedule_id), '일정에서 제외했습니다.'
+        job = Job.get_by_id(job_id)
+        schedule_mode = job.schedule_mode if job else FF_SCHEDULE_KEYS[0]
+        if schedule_mode == FF_SCHEDULE_KEYS[2]:
+            if active and is_include:
+                result, data = False, f'이미 일정에 등록되어 있습니다.'
+            elif active and not is_include:
+                result = self.jobaider.add_schedule(job_id)
+                data = '일정에 등록했습니다.' if result else '일정에 등록하지 못했어요.'
+            elif not active and is_include:
+                result, data = FRAMEWORK.scheduler.remove_job(schedule_id), '일정에서 제외했습니다.'
+            else:
+                result, data = False, '등록되지 않은 일정입니다.'
         else:
-            result, data = False, '등록되지 않은 일정입니다.'
+            result, data = False, f'등록할 수 없는 일정 방식입니다.'
         return result, data
 
     def plugin_load(self) -> None:
