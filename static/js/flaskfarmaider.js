@@ -155,9 +155,9 @@ function init_setting() {
         e.preventDefault();
         ret = globalSendCommand(
             'command_test_connection',
-            $('#{{ module_name }}_rclone_remote_addr').prop('value').trim(),
-            $('#{{ module_name }}_rclone_remote_user').prop('value').trim(),
-            $('#{{ module_name }}_rclone_remote_pass').prop('value').trim(),
+            $('#setting_rclone_remote_addr').prop('value').trim(),
+            $('#setting_rclone_remote_user').prop('value').trim(),
+            $('#setting_rclone_remote_pass').prop('value').trim(),
             callback_test_connection
         );
     });
