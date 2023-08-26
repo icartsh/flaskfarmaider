@@ -167,9 +167,8 @@ function init_setting() {
             case 'success':
                 console.log('Connection success');
                 $('#btn_test_connection_rclone').text('접속 성공');
-                //$('#btn_test_connection_rclone').attr('disabled', true);
                 console.log(result.vfses[0]);
-                $("#{{ module_name + '_rclone_remote_vfs' }}").prop('value', result.vfses[0]);
+                $('#setting_rclone_remote_vfs').prop('value', result.vfses[0]);
                 break;
             case 'failed': arguments
                 console.log('Connection failed');
