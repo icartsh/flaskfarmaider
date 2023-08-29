@@ -1,0 +1,81 @@
+{% extends 'flaskfarmaider.html' %}
+{% block content %}
+<form>
+    <div class="input-group mb-3">
+        <select class="custom-select col-1" id="trash-section-type">
+            <option value="{{ args.section_type_keys.0 }}">{{ args.section_types[args.section_type_keys.0].name }}</option>
+            <option value="{{ args.section_type_keys.1 }}">{{ args.section_types[args.section_type_keys.1].name }}</option>
+            <option value="{{ args.section_type_keys.2 }}">{{ args.section_types[args.section_type_keys.2].name }}</option>
+        </select>
+        <select class="custom-select col" id="trash-sections">
+            <option>No sections</option>
+        </select>
+        <div class="input-group-append">
+            <button class="btn btn-primary px-5" type="button" id="trash-btn-list">조회</button>
+        </div>
+        <select class="custom-select col-3" id="trash-task">
+            <option value="{{ args.tool_trash_keys.0 }}">{{ args.tool_trashes[args.tool_trash_keys.0].name }}</option>
+            <option value="{{ args.tool_trash_keys.1 }}">{{ args.tool_trashes[args.tool_trash_keys.1].name }}</option>
+            <option value="{{ args.tool_trash_keys.2 }}">{{ args.tool_trashes[args.tool_trash_keys.2].name }}</option>
+            <option value="{{ args.tool_trash_keys.3 }}">{{ args.tool_trashes[args.tool_trash_keys.3].name }}</option>
+            <option value="{{ args.tool_trash_keys.4 }}">{{ args.tool_trashes[args.tool_trash_keys.4].name }}</option>
+        </select>
+        <div class="input-group-append">
+            <button class="btn btn-primary px-5" type="button" id="trash-btn-execute" data-tool_trash_task_status="{{ args.tool_trash_task_status }}">
+                <span class="spinner-border spinner-border-sm text-success d-none" role="status" aria-hidden="true"></span>
+                <span class="px-1">실행</span>
+            </button>
+            <button class="btn btn-warning px-5" type="button" id="trash-btn-stop">중지</button>
+        </div>
+    </div>
+</form>
+<div>
+    <h4>이용 불가 파일: <span class="badge badge-light" id="trash-total-deleted">0</span> / 스캔이 필요한 폴더: <span class="badge badge-light" id="trash-total-paths">0</span></h4>
+</div>
+<nav class="pagination" aria-label="Page navigation"></nav>
+
+<nav class="trash-pagination">
+    <ul class="pagination justify-content-center">
+        <li class="page-item disabled"><a class="page-link" aria-label="Previous"><span aria-hidden="true">&laquo;</span></a></li>
+        <li class="page-item disabled"><a class="page-link disabled" href="#">1</a></li>
+        <li class="page-item disabled"><a class="page-link" href="#"  aria-label="Next"><span aria-hidden="true">&raquo;</span></a></li>
+    </ul>
+</nav>
+<table id="trash-list" class="table table-hover table-sm table-striped align-bottom table-responsive-sm">
+    <thead>
+        <tr class="text-primary">
+            <th scope="col" class="w-5 text-center">ID</th>
+            <th scope="col" class="w-5 text-center">이용불가</th>
+            <th scope="col" class="w-75">파일 이름</th>
+            <th scope="col" class="w-5 text-center">메뉴</th>
+        </tr>
+    </thead>
+    <tbody class="table-group-divider align-middle accordion" id="trash-accordion">
+    </tbody>
+    <tfoot>
+    </tfoot>
+</table>
+<nav class="trash-pagination">
+    <ul class="pagination justify-content-center">
+        <li class="page-item disabled"><a class="page-link" aria-label="Previous"><span aria-hidden="true">&laquo;</span></a></li>
+        <li class="page-item disabled"><a class="page-link disabled" href="#">1</a></li>
+        <li class="page-item disabled"><a class="page-link" href="#"  aria-label="Next"><span aria-hidden="true">&raquo;</span></a></li>
+    </ul>
+</nav>
+<script type="text/javascript">
+    var SECTION_TYPES = JSON.parse('{{ args.section_types|tojson }}');
+    var SECTION_TYPE_KEYS = JSON.parse('{{ args.section_type_keys|tojson }}');
+    var SECTIONS = JSON.parse('{{ args.sections|tojson }}');
+    var TASK_KEYS = JSON.parse('{{ args.task_keys|tojson }}');
+    var TASKS = JSON.parse('{{ args.tasks|tojson }}');
+    var SCAN_MODES = JSON.parse('{{ args.scan_modes|tojson }}');
+    var SCAN_MODE_KEYS = JSON.parse('{{ args.scan_mode_keys|tojson }}');
+    var TOOL_TRASH_KEYS = JSON.parse('{{ args.tool_trash_keys|tojson }}');
+    var TOOL_TRASHES = JSON.parse('{{ args.tool_trashes|tojson }}');
+    var STATUS_KEYS = JSON.parse('{{ args.status_keys|tojson }}');
+    var TOOL_TRASH_TASK_STATUS = '{{ args.tool_trash_task_status }}';
+    $(function() {
+        init_trash();
+    });
+</script>
+{% endblock %}

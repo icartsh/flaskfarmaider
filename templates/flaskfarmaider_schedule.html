@@ -81,9 +81,46 @@
 </table>
 
 <script type="text/javascript">
+    // assign variables
+    var TASKS = JSON.parse('{{ args.tasks|tojson }}');
+    var TASK_KEYS = JSON.parse('{{ args.task_keys|tojson }}');
+    var STATUSES = JSON.parse('{{ args.statuses|tojson }}');
+    var STATUS_KEYS = JSON.parse('{{ args.status_keys|tojson }}');
+    var FF_SCHEDULE_KEYS = JSON.parse('{{ args.ff_schedule_keys|tojson }}');
+    var FF_SCHEDULES = JSON.parse('{{ args.ff_schedules|tojson }}');
+    var LAST_LIST_OPTIONS = "{{ args[module_name ~ '_last_list_option'] }}".split('|');
+    var VFS = "{{ args.rclone_remote_vfs }}";
+    var SCAN_MODES = JSON.parse('{{ args.scan_modes|tojson }}');
+    var SCAN_MODE_KEYS = JSON.parse('{{ args.scan_mode_keys|tojson }}');
+    var PERIODICS = JSON.parse('{{ args.periodics|tojson }}');
+    var SECTIONS = JSON.parse('{{ args.sections|tojson }}');
+    var SECTION_TYPES = JSON.parse('{{ args.section_types|tojson }}');
+    var SECTION_TYPE_KEYS = JSON.parse('{{ args.section_type_keys|tojson }}');
+    var TASK_OPTS = [
+        { value: TASK_KEYS[0], name: TASKS[TASK_KEYS[0]]['name'] },
+        { value: TASK_KEYS[1], name: TASKS[TASK_KEYS[1]]['name'] },
+        { value: TASK_KEYS[2], name: TASKS[TASK_KEYS[2]]['name'] },
+        { value: TASK_KEYS[3], name: TASKS[TASK_KEYS[3]]['name'] },
+        { value: TASK_KEYS[4], name: TASKS[TASK_KEYS[4]]['name'] },
+        { value: TASK_KEYS[5], name: TASKS[TASK_KEYS[5]]['name'] },
+    ]
+    var SCAN_OPTS = [
+        { value: SCAN_MODE_KEYS[0], name: SCAN_MODES[SCAN_MODE_KEYS[0]]['name'] },
+        { value: SCAN_MODE_KEYS[1], name: SCAN_MODES[SCAN_MODE_KEYS[1]]['name'] },
+        { value: SCAN_MODE_KEYS[2], name: SCAN_MODES[SCAN_MODE_KEYS[2]]['name'] },
+    ]
+    var CLEAR_OPTS = [
+        { value: SECTION_TYPE_KEYS[0], name: SECTION_TYPES[SECTION_TYPE_KEYS[0]]['name'] },
+        { value: SECTION_TYPE_KEYS[1], name: SECTION_TYPES[SECTION_TYPE_KEYS[1]]['name'] },
+        { value: SECTION_TYPE_KEYS[2], name: SECTION_TYPES[SECTION_TYPE_KEYS[2]]['name'] },
+    ]
+    var SCHEDULE_OPTS = [
+        { value: FF_SCHEDULE_KEYS[0], name: FF_SCHEDULES[FF_SCHEDULE_KEYS[0]]['name'] },
+        { value: FF_SCHEDULE_KEYS[1], name: FF_SCHEDULES[FF_SCHEDULE_KEYS[1]]['name'] },
+        { value: FF_SCHEDULE_KEYS[2], name: FF_SCHEDULES[FF_SCHEDULE_KEYS[2]]['name'] },
+    ]
     $(function() {
         init_schedule();
     });
 </script>
-
 {% endblock %}

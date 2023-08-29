@@ -1,25 +1,64 @@
-var SCH_FORM_LINE = '<hr class="">'
-var SCH_FORM_TASK = build_sch_form_select('sch-task', '작업', TASK_OPTS, 9, '일정으로 등록할 작업');
-var SCH_FORM_DESC = build_sch_form_text('sch-description', '설명', '', 9, '일정 목록에 표시될 제목');
-var SCH_FORM_GROUP_TASK = build_sch_form_group('sch-form-group-task', [SCH_FORM_TASK, SCH_FORM_DESC, SCH_FORM_LINE]);
-var SCH_FORM_PATH = build_sch_form_text('sch-target-path', '로컬 경로', '', 9, '새로고침/스캔 할 경로<br>Flaskfarm에서 접근 가능한 로컬 경로');
-var SCH_FORM_GROUP_PATH = build_sch_form_group('sch-form-group-path', [SCH_FORM_PATH, SCH_FORM_LINE]);
-var SCH_FORM_VFS = build_sch_form_text('sch-vfs', 'VFS 리모트', '', 5, 'rclone rc로 접근 가능한 리모트 이름<br>ex. gds:');
-var SCH_FORM_RECURSIVE = build_sch_form_checkbox('sch-recursive', 'recursive', 'off', 9, 'rclone refresh의 --recursive 옵션 적용 여부');
-var SCH_FORM_GROUP_RCLONE = build_sch_form_group('sch-form-group-rclone', [SCH_FORM_VFS, SCH_FORM_RECURSIVE, SCH_FORM_LINE]);
-var SCH_FORM_SCAN_TYPE = build_sch_form_radio('sch-scan-mode', '스캔 방식', SCAN_OPTS, 9, '');
-var SCH_FORM_SCAN_PERIODIC = build_sch_form_select('sch-scan-mode-periodic-id', '주기적 스캔 작업', [], 9, 'Plexmate 플러그인의 주기적 스캔 작업 목록')
-var SCH_FORM_GROUP_SCAN = build_sch_form_group('sch-form-group-scan', [SCH_FORM_SCAN_TYPE, SCH_FORM_SCAN_PERIODIC, SCH_FORM_LINE]);
-var SCH_FORM_CLEAR_TYPE = build_sch_form_radio('sch-clear-type', '파일 정리 유형', CLEAR_OPTS, 9, '파일 정리할 라이브러리의 유형')
-var SCH_FORM_CLEAR_LEVEL = build_sch_form_select('sch-clear-level', '파일 정리 단계', [], 3, 'Plexmate 파일 정리 단계')
-var SCH_FORM_CLEAR_SECTION = build_sch_form_select('sch-clear-section', '파일 정리 섹션', [], 5, '파일 정리할 라이브러리 섹션')
-var SCH_FORM_GROUP_CLEAR = build_sch_form_group('sch-form-group-clear', [SCH_FORM_CLEAR_TYPE, SCH_FORM_CLEAR_LEVEL, SCH_FORM_CLEAR_SECTION, SCH_FORM_LINE]);
-var SCH_FORM_SCH_MODE = build_sch_form_radio('sch-schedule-mode', '일정 방식', SCHEDULE_OPTS, 9, '')
-var SCH_FORM_SCH_INTERVAL = build_sch_form_text('sch-schedule-interval', '시간 간격', '', 5, 'Interval(minute 단위) 혹은 Cron 설정');
-var SCH_FORM_SCH_AUTO = build_sch_form_checkbox('sch-schedule-auto-start', '시작시 일정 등록', 'off', 9, '');
-var SCH_FORM_GROUP_SCH = build_sch_form_group('sch-form-group-sch', [SCH_FORM_SCH_MODE, SCH_FORM_SCH_INTERVAL, SCH_FORM_SCH_AUTO, SCH_FORM_LINE]);
+function init() {
+    E_CONFIRM_TITLE = $('#confirm_title');
+    E_CONFIRM_BODY = $('#confirm_body');
+    E_CONFIRM_BTN = $('#confirm_button');
+    E_CONFIRM_MODAL = $("#confirm_modal");
+}
+
+function init_setting() {
+    init();
+    $("body").on('click', '#btn_test_connection_rclone', function (e) {
+        e.preventDefault();
+        ret = globalSendCommand(
+            'command_test_connection',
+            $('#setting_rclone_remote_addr').prop('value').trim(),
+            $('#setting_rclone_remote_user').prop('value').trim(),
+            $('#setting_rclone_remote_pass').prop('value').trim(),
+            callback_test_connection
+        );
+    });
+
+    function callback_test_connection(result) {
+        switch (result.ret) {
+            case 'success':
+                console.log('Connection success');
+                $('#btn_test_connection_rclone').text('접속 성공');
+                console.log(result.vfses[0]);
+                $('#setting_rclone_remote_vfs').prop('value', result.vfses[0]);
+                break;
+            case 'failed': arguments
+                console.log('Connection failed');
+                $('#btn_test_connection_rclone').text('접속 실패');
+                break;
+            default:
+                console.log('Connection returns : ${result.ret}');
+        }
+    }
+}
 
 function init_schedule() {
+    init();
+    SCH_FORM_LINE = '<hr class="">'
+    SCH_FORM_TASK = build_sch_form_select('sch-task', '작업', TASK_OPTS, 9, '일정으로 등록할 작업');
+    SCH_FORM_DESC = build_sch_form_text('sch-description', '설명', '', 9, '일정 목록에 표시될 제목');
+    SCH_FORM_GROUP_TASK = build_sch_form_group('sch-form-group-task', [SCH_FORM_TASK, SCH_FORM_DESC, SCH_FORM_LINE]);
+    SCH_FORM_PATH = build_sch_form_text('sch-target-path', '로컬 경로', '', 9, '새로고침/스캔 할 경로<br>Flaskfarm에서 접근 가능한 로컬 경로');
+    SCH_FORM_GROUP_PATH = build_sch_form_group('sch-form-group-path', [SCH_FORM_PATH, SCH_FORM_LINE]);
+    SCH_FORM_VFS = build_sch_form_text('sch-vfs', 'VFS 리모트', '', 5, 'rclone rc로 접근 가능한 리모트 이름<br>ex. gds:');
+    SCH_FORM_RECURSIVE = build_sch_form_checkbox('sch-recursive', 'recursive', 'off', 9, 'rclone refresh의 --recursive 옵션 적용 여부');
+    SCH_FORM_GROUP_RCLONE = build_sch_form_group('sch-form-group-rclone', [SCH_FORM_VFS, SCH_FORM_RECURSIVE, SCH_FORM_LINE]);
+    SCH_FORM_SCAN_TYPE = build_sch_form_radio('sch-scan-mode', '스캔 방식', SCAN_OPTS, 9, '');
+    SCH_FORM_SCAN_PERIODIC = build_sch_form_select('sch-scan-mode-periodic-id', '주기적 스캔 작업', [], 9, 'Plexmate 플러그인의 주기적 스캔 작업 목록')
+    SCH_FORM_GROUP_SCAN = build_sch_form_group('sch-form-group-scan', [SCH_FORM_SCAN_TYPE, SCH_FORM_SCAN_PERIODIC, SCH_FORM_LINE]);
+    SCH_FORM_CLEAR_TYPE = build_sch_form_radio('sch-clear-type', '파일 정리 유형', CLEAR_OPTS, 9, '파일 정리할 라이브러리의 유형')
+    SCH_FORM_CLEAR_LEVEL = build_sch_form_select('sch-clear-level', '파일 정리 단계', [], 3, 'Plexmate 파일 정리 단계')
+    SCH_FORM_CLEAR_SECTION = build_sch_form_select('sch-clear-section', '파일 정리 섹션', [], 5, '파일 정리할 라이브러리 섹션')
+    SCH_FORM_GROUP_CLEAR = build_sch_form_group('sch-form-group-clear', [SCH_FORM_CLEAR_TYPE, SCH_FORM_CLEAR_LEVEL, SCH_FORM_CLEAR_SECTION, SCH_FORM_LINE]);
+    SCH_FORM_SCH_MODE = build_sch_form_radio('sch-schedule-mode', '일정 방식', SCHEDULE_OPTS, 9, '')
+    SCH_FORM_SCH_INTERVAL = build_sch_form_text('sch-schedule-interval', '시간 간격', '', 5, 'Interval(minute 단위) 혹은 Cron 설정');
+    SCH_FORM_SCH_AUTO = build_sch_form_checkbox('sch-schedule-auto-start', '시작시 일정 등록', 'off', 9, '');
+    SCH_FORM_GROUP_SCH = build_sch_form_group('sch-form-group-sch', [SCH_FORM_SCH_MODE, SCH_FORM_SCH_INTERVAL, SCH_FORM_SCH_AUTO, SCH_FORM_LINE]);
+
     E_SCH_SETTING = $('#sch-setting');
     E_SCH_SETTING.append(SCH_FORM_GROUP_TASK);
     E_TASK = $('#sch-task');
@@ -53,7 +92,7 @@ function init_schedule() {
     E_CLEAR_RADIO_2 = $('#sch-clear-type2');
     // 라이브러리 타입에 따라 목록 변경
     $('input[id^="sch-clear-type"]:radio').change(function() {
-        set_clear_section($(this).prop('value'));
+        set_section_list($(this).prop('value'), E_CLEAR_SECTION);
         set_clear_level($(this).prop('value'));
     })
     E_CLEAR_LEVEL = $('#sch-clear-level');
@@ -94,10 +133,6 @@ function init_schedule() {
     });
     E_MODAL_TITLE = $('#sch-add-modal_title');
     E_MODAL = $('#sch-add-modal')
-    E_CONFIRM_TITLE = $('#confirm_title');
-    E_CONFIRM_BODY = $('#confirm_body');
-    E_CONFIRM_BTN = $('#confirm_button');
-    E_CONFIRM_MODAL = $("#confirm_modal");
     E_WORKING_DIR = $('#working-directory');
     E_BROWSER_WD = $('#working-directory');
     // 현재 디렉토리
@@ -131,7 +166,7 @@ function init_schedule() {
         );
     });
     // 초기 일정 불러오기
-    // f'{order}|{page}|{search}|{option1}|{option2}')
+    // f'{order}|{page}|{search}|{option1}|{option2}'
     if (LAST_LIST_OPTIONS.length == 5) {
         E_GLOBAL_SEARCH_ORDER.prop('value', LAST_LIST_OPTIONS[0]);
         E_GLOBAL_SEARCH_KEYWORD.prop('value', LAST_LIST_OPTIONS[2]);
@@ -150,34 +185,208 @@ function init_schedule() {
     });
 }
 
-function init_setting() {
-    $("body").on('click', '#btn_test_connection_rclone', function (e) {
-        e.preventDefault();
-        ret = globalSendCommand(
-            'command_test_connection',
-            $('#setting_rclone_remote_addr').prop('value').trim(),
-            $('#setting_rclone_remote_user').prop('value').trim(),
-            $('#setting_rclone_remote_pass').prop('value').trim(),
-            callback_test_connection
-        );
+function init_trash() {
+    init();
+    E_TRASH_TOTAL_DELETED = $('#trash-total-deleted');
+    E_TRASH_TOTAL_PATHS = $('#trash-total-paths');
+    E_TRASH_SECTIONS = $('#trash-sections');
+    E_TRASH_SECTION_TYPE = $('#trash-section-type');
+    E_TRASH_SECTION_TYPE.change(function() {
+        set_section_list($(this).prop('value'), E_TRASH_SECTIONS);
+    });
+    set_section_list(E_TRASH_SECTION_TYPE.prop('value'), E_TRASH_SECTIONS);
+    E_TRASH_BTN_LIST = $('#trash-btn-list');
+    E_TRASH_BTN_LIST.on('click', function(e) {
+        trash_get_list(E_TRASH_SECTIONS.prop('value'), 1);
+    });
+    console.log(TOOL_TRASH_TASK_STATUS);
+    E_TRASH_BTN_STOP = $('#trash-btn-stop');
+    E_TRASH_BTN_STOP.on('click', function(e) {
+        globalSendCommandPage('stop', '', '', '', function(result) {
+            if (result.success) {
+                notify(result.data, 'success');
+                setTimeout(() => globalSendCommandPage('status', '', '', '', function(result) {
+                    trash_toogle_execute_btn(result.data);
+                }), 5000);
+            } else {
+                notify(result.data, 'warning');
+            }
+        });
+    });
+    E_TRASH_TASK = $('#trash-task');
+    E_TRASH_BTN_EXCEUTE = $('#trash-btn-execute');
+    E_TRASH_BTN_EXCEUTE.on('click', function(e) {
+        globalSendCommandPage('status', '', '', '', function(result) {
+            trash_toogle_execute_btn(result.data);
+        });
+        globalSendCommandPage(E_TRASH_TASK.prop('value'), E_TRASH_SECTIONS.prop('value'), '', '', function(result) {
+            if (result.success) {
+                notify(result.data, 'success');
+                trash_get_list(E_TRASH_SECTIONS.prop('value'), 1);
+            } else {
+                notify(result.data, 'warning');
+            }
+            globalSendCommandPage('status', '', '', '', function(result) {
+                trash_toogle_execute_btn(result.data);
+            });
+        });
+        notify('작업을 실행합니다.', 'success');
+        globalSendCommandPage('status', '', '', '', function(result) {
+            trash_toogle_execute_btn(result.data);
+        });
+    });
+    trash_toogle_execute_btn(TOOL_TRASH_TASK_STATUS);
+}
+
+function trash_toogle_execute_btn(status) {
+    if (status == STATUS_KEYS[0]) {
+        E_TRASH_BTN_EXCEUTE.children('span').eq(0).prop('class', 'd-none');
+        E_TRASH_BTN_EXCEUTE.children('span').eq(1).text('실행');
+        E_TRASH_BTN_EXCEUTE.prop('class', 'btn btn-primary px-5');
+        E_TRASH_BTN_EXCEUTE.prop('disabled', false);
+    } else {
+        E_TRASH_BTN_EXCEUTE.children('span').eq(0).prop('class', 'spinner-border spinner-border-sm text-success');
+        E_TRASH_BTN_EXCEUTE.children('span').eq(1).text('실행중');
+        E_TRASH_BTN_EXCEUTE.prop('class', 'btn btn-danger px-5');
+        E_TRASH_BTN_EXCEUTE.prop('disabled', true);
+    }
+}
+
+
+async function trash_get_list(lib_id, page_no) {
+    globalSendCommandPage('list', lib_id, page_no, 50, function(result) {
+        if (result.success) {
+            trash_make_list(result.data);
+        } else {
+            notify(result.data, 'warning');
+        }
+    });
+}
+
+function trash_make_list(data) {
+    tbody = $('#trash-list tbody')
+    tbody.empty();
+    E_TRASH_TOTAL_DELETED.text(data.total);
+    E_TRASH_TOTAL_PATHS.text(data.total_paths);
+    if (data.data) {
+        data.data.forEach(function(item) {
+            col_id = '<td class="text-center">' + item.id + '</td>';
+            col_deleted = '<td class="text-center">' + item.deleted_at + '</td>';
+            col_file = '<td class="">' + item.file + '</td>';
+            col_menu = '<td class="text-center"><button type="button" class="btn btn-outline-primary sch-context-menu"';
+            col_menu += ' data-id="' + item.id + '" data-metadata_item_id="' + item.metadata_item_id +'" data-path="' + item.file +'">메뉴</button></td>';
+            row = '<tr class="">' + col_id + col_deleted + col_file + col_menu + '</tr>';
+            tbody.append(row);
+        });
+    }
+    // 페이지
+    pagination($('nav.trash-pagination'), data.page, data.total, data.limit);
+    // 컨텍스트 메뉴
+    $.contextMenu({
+        selector: '.sch-context-menu',
+        trigger: 'left',
+        callback: function(command, opt) {
+            path = opt.$trigger.data('path');
+            recursive = opt.inputs['recursive'].$input.prop('checked');
+            scan_mode = opt.inputs['scan_mode'].$input.prop('value');
+            globalSendCommandPage(command, path, recursive, scan_mode + "|-1", function(result) {
+                if (result.success) {
+                    notify(result.data, 'success');
+                } else {
+                    notify(result.data, 'warning');
+                }
+            });
+        },
+        items: {
+            [TASK_KEYS[0]]: {
+                name: TASKS[TASK_KEYS[0]].name,
+                icon: 'fa-refresh',
+            },
+            [TASK_KEYS[1]]: {
+                name: TASKS[TASK_KEYS[1]].name,
+                icon: 'fa-refresh',
+            },
+            [TASK_KEYS[2]]: {
+                name: TASKS[TASK_KEYS[2]].name,
+                icon: 'fa-search',
+            },
+            sep2: "---------",
+            delete: {
+                name: '삭제',
+                icon: 'fa-trash',
+                callback: function(command, opt) {
+                    data = opt.$trigger.data();
+                    confirm_modal('이 파일을 플렉스에서 삭제할까요?', data.path, function() {
+                        globalSendCommandPage(command, data.metadata_item_id, data.id, '', function(result) {
+                            if (result.success) {
+                                notify(result.data, 'success');
+                                page = $('ul.pagination li.active[aria-current=page]').first().text()
+                                trash_get_list(E_TRASH_SECTIONS.prop('value'), page ? page : 1);
+                            } else {
+                                notify(result.data, 'warning');
+                            }
+                        });
+                    });
+                },
+            },
+            sep3: "---------",
+            recursive: {
+                name: 'Recursive',
+                type: 'checkbox',
+                selected: false,
+                disabled: true,
+            },
+            scan_mode: {
+                name: '스캔 방식',
+                type: 'select',
+                options: {
+                    [SCAN_MODE_KEYS[2]]: SCAN_MODES[SCAN_MODE_KEYS[2]].name,
+                    [SCAN_MODE_KEYS[0]]: SCAN_MODES[SCAN_MODE_KEYS[0]].name,
+                },
+                selected: SCAN_MODE_KEYS[2],
+                disabled: true,
+            },
+        },
+    });
+}
+
+function pagination(target, page, total, limit) {
+    target.empty();
+    limit_page = 10;
+    final_page = Math.ceil(total / limit);
+    if (final_page > 1) {
+        first_page = Math.floor(page / limit_page) * limit_page;
+        if (page < limit_page) {
+            first_page++;
+        }
+        last_page = Math.min(first_page + limit_page, final_page);
+        elements = '<ul class="pagination justify-content-center">';
+        if (first_page >= limit_page) {
+            elements += '<li class="page-item"><a class="page-link" href="#" data-page="1">1</a></li>';
+        }
+        elements += '<li class="page-item' + (first_page < limit_page ? ' disabled' : '') + '">';
+        elements += '<a class="page-link" aria-label="Previous" data-page="' + (first_page - 1) + '"><span aria-hidden="true">&laquo;</span></a></li>';
+        for (i = first_page; i <= last_page; i++) {
+            elements += '<li class="page-item' + (i == page ? ' active" aria-current="page"' : '"') + '>';
+            elements += '<a class="page-link" href="#" data-page="' + i + '">' + i + '</a></li>';
+        }
+        elements += '<li class="page-item' + (last_page >= final_page ? ' disabled' : '') + '">';
+        elements += '<a class="page-link" href="#" aria-label="Next" data-page="' + (last_page + 1) +'"><span aria-hidden="true">&raquo;</span></a></li>';
+        if (last_page < final_page) {
+            elements += '<li class="page-item"><a class="page-link" href="#" data-page="' + final_page + '">' + final_page + '</a></li></ul>';
+        }
+    } else {
+        elements = '<ul class="pagination justify-content-center">';
+        elements += '<li class="page-item disabled"><a class="page-link" aria-label="Previous"><span aria-hidden="true">&laquo;</span></a></li>';
+        elements += '<li class="page-item disabled"><a class="page-link disabled" href="#">1</a></li>';
+        elements += '<li class="page-item disabled"><a class="page-link" href="#"  aria-label="Next"><span aria-hidden="true">&raquo;</span></a></li></ul>';
+    }
+    target.append(elements);
+    $('.page-link').on('click', function(e) {
+        page = $(this).data('page');
+        trash_get_list(E_TRASH_SECTIONS.prop('value'), page);
     });
 
-    function callback_test_connection(result) {
-        switch (result.ret) {
-            case 'success':
-                console.log('Connection success');
-                $('#btn_test_connection_rclone').text('접속 성공');
-                console.log(result.vfses[0]);
-                $('#setting_rclone_remote_vfs').prop('value', result.vfses[0]);
-                break;
-            case 'failed': arguments
-                console.log('Connection failed');
-                $('#btn_test_connection_rclone').text('접속 실패');
-                break;
-            default:
-                console.log('Connection returns : ${result.ret}');
-        }
-    }
 }
 
 function confirm_modal(title, content, func) {
@@ -215,8 +424,8 @@ function browser_command(cmd) {
 }
 
 function list_dir(result) {
-    $('#brw-list-table thead.dir-parent').html('');
-    $('#brw-list-table tbody').html('');
+    $('#brw-list-table thead.dir-parent').empty();
+    $('#brw-list-table tbody').empty();
     for (var index in result) {
         if (index == 0) {
             link_classes = 'dir-folder no-context restrict-context';
@@ -367,13 +576,15 @@ function make_list(data) {
         col_menu += '" data-schedule_auto_start="' + model.schedule_auto_start;
         col_menu += '" data-clear_section="' + (model.clear_section ? model.clear_section : -1);
         col_menu += '" data-clear_level="' + (model.clear_level ? model.clear_level : 'start1');
-        col_menu += '" data-clear_type="' + (model.clear_type ? model.clear_type : SECTION_TYPES[0]);
+        col_menu += '" data-clear_type="' + (model.clear_type ? model.clear_type : SECTION_TYPE_KEYS[0]);
 
         col_menu += '">메뉴</button></td>';
 
         row_sub = '<tr><td colspan="8" class="p-0"><div id="collapse-' + model.id;
         row_sub += '" class="collapse hide" aria-labelledby="list-' + model.id;
-        row_sub += '" data-parent="#sch-accordion"><textarea class="form-control h-50 bg-dark text-light" rows=10>' + model.journal + '</textarea></div></td></tr>';
+        row_sub += '" data-parent="#sch-accordion"><div class="">';
+        row_sub += '';
+        row_sub += '</div></div></td></tr>';
         row_group = '<tr id="list-' + model.id + '" class="" role="button" data-toggle="collapse" data-target="#collapse-' + model.id;
         row_group += '" aria-expanded="true" aria-controls="collapse-' + model.id + '">';
         row_group += col_id + col_task + col_interval + col_title + col_switch + col_status + col_ftime + col_menu +'</tr>' + row_sub;
@@ -489,11 +700,11 @@ function disabled_by_scan_mode(mode) {
     }
 }
 
-function set_clear_section(type) {
-    E_CLEAR_SECTION.empty();
+function set_section_list(type, target) {
+    target.empty();
     if (SECTIONS[type]) {
         SECTIONS[type].forEach(function(item) {
-            E_CLEAR_SECTION.append(
+            target.append(
                 $('<option></option>').prop('value', item.id).append(item.name)
             )
         });
@@ -501,6 +712,7 @@ function set_clear_section(type) {
         console.error('type: ' + type);
         console.error(SECTIONS);
         notify('라이브러리 섹션 정보가 없습니다.', 'warning');
+        target.append('<option>정보 없음</option>');
     }
 }
 
@@ -508,9 +720,9 @@ function set_clear_level(type) {
     E_CLEAR_LEVEL.empty();
     E_CLEAR_LEVEL.append($('<option></option>').prop('value', 'start1').html('1단계'));
     switch(type) {
-        case SECTION_TYPES[0]:
-        case SECTION_TYPES[1]:
-            if (type == SECTION_TYPES[1]) {
+        case SECTION_TYPE_KEYS[0]:
+        case SECTION_TYPE_KEYS[1]:
+            if (type == SECTION_TYPE_KEYS[1]) {
                 E_CLEAR_LEVEL.append($('<option></option>').prop('value', 'start21').html('2-1단계'));
                 E_CLEAR_LEVEL.append($('<option></option>').prop('value', 'start22').html('2-2단계'));
             } else {
@@ -519,7 +731,7 @@ function set_clear_level(type) {
             E_CLEAR_LEVEL.append($('<option></option>').prop('value', 'start3').html('3단계'));
             E_CLEAR_LEVEL.append($('<option></option>').prop('value', 'start4').html('4단계'));
             break;
-        case SECTION_TYPES[2]:
+        case SECTION_TYPE_KEYS[2]:
             E_CLEAR_LEVEL.append($('<option></option>').prop('value', 'start2').html('2단계'));
             break;
     }
@@ -543,9 +755,10 @@ function schedule_modal(from, data) {
         E_INTERVAL.prop('value', data.schedule_interval);
         E_SCH_AUTO.bootstrapToggle((data.schedule_auto_start) ? 'on' : 'off');
         E_MODAL_TITLE.html('일정 편집 - ' + data.id);
-        $('input[id^="sch-clear-type"]:radio[value="' + data.clear_type + '"]').prop('checked', true);
-        set_clear_level(data.clear_type);
-        set_clear_section(data.clear_type);
+        clear_type = data.clear_type ? data.clear_type : SECTION_TYPE_KEYS[0];
+        $('input[id^="sch-clear-type"]:radio[value="' + clear_type + '"]').prop('checked', true);
+        set_clear_level(clear_type);
+        set_section_list(clear_type, E_CLEAR_SECTION);
         E_CLEAR_SECTION.prop('value', data.clear_section);
         E_CLEAR_LEVEL.prop('value', data.clear_level);
     } else {
@@ -570,7 +783,7 @@ function schedule_modal(from, data) {
         E_CLEAR_RADIO_0.prop('checked', true);
         disabled_by_schedule_mode(FF_SCHEDULE_KEYS[0]);
         disabled_by_scan_mode(SCAN_MODE_KEYS[0]);
-        set_clear_section(E_CLEAR_RADIO_0.prop('value'));
+        set_section_list(E_CLEAR_RADIO_0.prop('value'), E_CLEAR_SECTION);
         set_clear_level(E_CLEAR_RADIO_0.prop('value'));
         E_MODAL_TITLE.html("일정 추가");
     }

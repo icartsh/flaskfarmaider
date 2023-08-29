@@ -4,22 +4,31 @@ from datetime import datetime
 from typing import Any
 import traceback
 import shutil
-import pathlib
 import yaml
+import sqlite3
+import functools
+import subprocess
+from subprocess import CompletedProcess
+import shlex
+import platform
+from collections import defaultdict
+import time
 
 import requests
+from requests import Response
 
-from framework.scheduler import Job as FrameworkJob # type: ignore
-
-from .setup import PLUGIN, FRAMEWORK, SETTING, LOGGER
-from .models import Job, TASKS, TASK_KEYS, STATUS_KEYS, FF_SCHEDULE_KEYS, SCAN_MODE_KEYS
-from .agents import Agent, RcloneAgent, PlexmateAgent, UbuntuAgent
+from .setup import PLUGIN, LOGGER, PluginModuleBase, ModelBase, FrameworkJob, PlexServer
+from .constants import FRAMEWORK, TASK_KEYS, SCAN_MODE_KEYS, DEPEND_SOURCE_YAML, DEPEND_USER_YAML, SECTION_TYPE_KEYS
+from .constants import SETTING_PLEXMATE_MAX_SCAN_TIME, SETTING_PLEXMATE_TIMEOVER_RANGE, SETTING_RCLONE_REMOTE_VFS, SETTING_STARTUP_EXECUTABLE
+from .constants import SETTING_RCLONE_REMOTE_ADDR, SETTING_RCLONE_REMOTE_USER, SETTING_RCLONE_REMOTE_PASS, SETTING_RCLONE_MAPPING
+from .constants import SETTING_STARTUP_COMMANDS, SETTING_STARTUP_TIMEOUT, SETTING_PLEXMATE_PLEX_MAPPING, SCHEDULE, FF_SCHEDULE_KEYS
+from .constants import TOOL_TRASH_KEYS, TOOL_TRASH_TASK_STATUS, STATUS_KEYS
 
 
 class Aider:
 
-    def __init__(self):
-        pass
+    def __init__(self, name: str = None):
+        self.name = name
 
     def split_by_newline(cls, setting_text: str) -> list[str]:
         return [text.strip() for text in setting_text.split('\n')]
@@ -34,186 +43,14 @@ class Aider:
         else:
             return setting_text.split('\n')
 
+    def get_readable_time(self, _time: float) -> str:
+        return datetime.utcfromtimestamp(_time).strftime('%b %d %H:%M')
 
-class JobAider(Aider):
-
-    def __init__(self):
-        super().__init__()
-
-    def handle(self, job: Job | dict[str, Any]):
-        if isinstance(job, Job):
-            task = job.task
-            target = job.target
-            recursive = job.recursive
-            vfs = job.vfs
-            scan_mode = job.scan_mode
-            periodic_id = job.periodic_id
-            clear_type = job.clear_type
-            clear_level = job.clear_level
-            clear_section = job.clear_section
-        else:
-            task = job.get('task')
-            target = job.get('target')
-            recursive = job.get('recursive')
-            vfs = PLUGIN.ModelSetting.get(f'{SETTING}_rclone_remote_vfs')
-            scan_mode = job.get('scan_mode')
-            periodic_id = job.get('periodic_id')
-            clear_type = None
-            clear_level = None
-            clear_section = -1
-
-        startup_executable = PLUGIN.ModelSetting.get(f'{SETTING}_startup_executable')
-        startup_executable = True if startup_executable.lower() == 'true' else False
-
-        brief = self.get_agent_brief(target, vfs, recursive, scan_mode, periodic_id, startup_executable, clear_type, clear_level, clear_section)
-        agent = self.hire_agent(task, brief)
-
-        # start task
-        self.run_agent(self, agent, job)
-        LOGGER.debug(f'job done...')
-
-    @FRAMEWORK.celery.task
-    def run_agent(self, agent: Agent, job: Job | dict[str, Any]) -> None:
-        if isinstance(job, Job): job.set_status(STATUS_KEYS[1])
-        journal = agent.run()
-        if isinstance(job, Job):
-            job.journal = ('\n').join(journal)
-            job.set_status(STATUS_KEYS[2])
-
-    def get_agent_brief(self, target: str, vfs: str, recursive: bool,
-                        scan_mode: str, periodic_id: int, startup_executable: bool,
-                        clear_type: str = None, clear_level: str = None, clear_section: int = -1) -> dict[str, Any]:
-        return {
-            'rclone': {
-                'rc_addr': PLUGIN.ModelSetting.get(f'{SETTING}_rclone_remote_addr'),
-                'rc_user': PLUGIN.ModelSetting.get(f'{SETTING}_rclone_remote_user'),
-                'rc_pass': PLUGIN.ModelSetting.get(f'{SETTING}_rclone_remote_pass'),
-                'rc_mapping': self.parse_mappings(PLUGIN.ModelSetting.get(f'{SETTING}_rclone_remote_mapping')),
-            },
-            'log': {
-                'logger': LOGGER,
-                'level': LOGGER.level
-            },
-            'args': {
-                'dirs': [target],
-                'fs': vfs,
-                'recursive': recursive,
-                'periodic_id': periodic_id,
-                'scan_mode': scan_mode,
-                'command': '',
-                'clear_type': clear_type,
-                'clear_level': clear_level,
-                'clear_section': clear_section,
-            },
-            'init': {
-                'execute_commands': startup_executable,
-                'commands': self.split_by_newline(PLUGIN.ModelSetting.get(f'{SETTING}_startup_commands')),
-                'timeout': int(PLUGIN.ModelSetting.get(f'{SETTING}_startup_timeout')),
-                'dependencies': yaml.safe_load(SettingAider.depends()).get('dependencies'),
-            },
-            'plexmate': {
-                'max_scan_time': int(PLUGIN.ModelSetting.get(f'{SETTING}_plexmate_max_scan_time')),
-                'timeover_range': PLUGIN.ModelSetting.get(f'{SETTING}_plexmate_timeover_range'),
-                'plex_mapping': self.parse_mappings(PLUGIN.ModelSetting.get(f'{SETTING}_plexmate_plex_mapping')),
-            }
-        }
-
-    def hire_agent(self, task: str, brief: dict[str, Any]):
-        if task == TASK_KEYS[0]:
-            if brief['args']['scan_mode'] == SCAN_MODE_KEYS[0]:
-                brief['args']['command'] = 'refresh'
-            elif brief['args']['scan_mode'] == SCAN_MODE_KEYS[1]:
-                brief['args']['command'] = 'periodic'
-            elif brief['args']['scan_mode'] == SCAN_MODE_KEYS[2]:
-                brief['args']['command'] = 'refresh_web'
-        elif task == TASK_KEYS[1]:
-            brief['args']['command'] = 'vfs/refresh'
-        elif task == TASK_KEYS[2]:
-            if brief['args']['scan_mode'] == SCAN_MODE_KEYS[0]:
-                brief['args']['command'] = 'scan'
-            elif brief['args']['scan_mode'] == SCAN_MODE_KEYS[1]:
-                brief['args']['command'] = 'scan_periodic'
-            elif brief['args']['scan_mode'] == SCAN_MODE_KEYS[2]:
-                brief['args']['command'] = 'scan_web'
-        elif task == TASK_KEYS[3]:
-            brief['args']['command'] = ''
-        elif task == TASK_KEYS[4]:
-            brief['args']['command'] = 'clear'
-
-        if task == TASK_KEYS[1]:
-            agent = RcloneAgent(brief)
-        elif task == TASK_KEYS[5]:
-            agent = UbuntuAgent(brief)
-        else:
-            if PLUGIN.get_plex_mate():
-                agent = PlexmateAgent(brief)
-            else:
-                raise Exception('plex_mate 플러그인을 찾을 수 없습니다.')
-
-        return agent
-
-    def update(self, formdata: dict[str, list]) -> tuple[bool, str]:
-        try:
-            _id = int(formdata.get('id')[0]) if formdata.get('id') else -1
-            task = formdata.get('sch-task')[0] if formdata.get('sch-task') else TASK_KEYS[0]
-            if _id == -1:
-                model = Job(task)
-                model.save()
-            else:
-                model = Job.get_by_id(_id)
-                model.task = task
-            desc = formdata.get('sch-description')[0] if formdata.get('sch-description') else ''
-            model.desc = desc if desc != '' else f'{TASKS[model.task]["name"]}'
-            model.schedule_mode = formdata.get('sch-schedule-mode')[0] if formdata.get('sch-schedule-mode') else FF_SCHEDULE_KEYS[0]
-            model.schedule_interval = formdata.get('sch-schedule-interval')[0] if formdata.get('sch-schedule-interval') else '60'
-            if task == TASK_KEYS[5]:
-                model.target = '시작시 설정의 커맨드를 실행'
-                model.schedule_interval = '매 시작'
-            elif task == TASK_KEYS[3]:
-                model.target = 'Plexmate의 READY 항목을 새로고침'
-            else :
-                model.target = formdata.get('sch-target-path')[0] if formdata.get('sch-target-path') else '/'
-            model.vfs = formdata.get('sch-vfs')[0] if formdata.get('sch-vfs') else 'remote:'
-            recursive = formdata.get('sch-recursive')[0] if formdata.get('sch-recursive') else 'false'
-            model.recursive = True if recursive.lower() == 'true' else False
-            schedule_auto_start = formdata.get('sch-schedule-auto-start')[0] if formdata.get('sch-schedule-auto-start') else 'false'
-            model.schedule_auto_start = True if schedule_auto_start.lower() == 'true' else False
-            model.scan_mode = formdata.get('sch-scan-mode')[0] if formdata.get('sch-scan-mode') else SCAN_MODE_KEYS[0]
-            model.periodic_id = int(formdata.get('sch-scan-mode-periodic-id')[0]) if formdata.get('sch-scan-mode-periodic-id') else -1
-            model.clear_type = formdata.get('sch-clear-type')[0] if formdata.get('sch-clear-type') else ''
-            model.clear_level = formdata.get('sch-clear-level')[0] if formdata.get('sch-clear-level') else ''
-            model.clear_section = int(formdata.get('sch-clear-section')[0]) if formdata.get('sch-clear-section') else -1
-            model.save()
-
-            schedule_id = Job.create_schedule_id(model.id)
-            is_include = FRAMEWORK.scheduler.is_include(schedule_id)
-            if is_include:
-                FRAMEWORK.scheduler.remove_job(schedule_id)
-                if model.schedule_mode == FF_SCHEDULE_KEYS[2]:
-                    LOGGER.debug(f'일정에 재등록합니다: {schedule_id}')
-                    self.add_schedule(model.id)
-
-            if model.id > 0:
-                result, data = True, '저장했습니다.'
-            else:
-                result, data = False, '저장에 실패했습니다.'
-        except Exception as e:
-            LOGGER.error(traceback.format_exc())
-            result, data = False, '저장에 실패했습니다.'
-        finally:
-            return result, data
-
-    def add_schedule(self, id: int, model: Job = None) -> bool:
-        try:
-            model = model if model else Job.get_by_id(id)
-            schedule_id = Job.create_schedule_id(model.id)
-            if not FRAMEWORK.scheduler.is_include(schedule_id):
-                sch = FrameworkJob(__package__, schedule_id, model.schedule_interval, self.handle, model.desc, args=(model,))
-                FRAMEWORK.scheduler.add_job_instance(sch)
-            return True
-        except Exception as e:
-            LOGGER.error(traceback.format_exc())
-            return False
+    def deduplicate(self, items: list[str]) -> list[str]:
+        bucket = {}
+        for item in items:
+            bucket[item] = False
+        return list(bucket.keys())
 
     def parse_mappings(self, text: str) -> dict[str, str]:
         mappings = {}
@@ -223,6 +60,172 @@ class JobAider(Aider):
                 source, target = setting.split(':')
                 mappings[source.strip()] = target.strip()
         return mappings
+
+    def update_path(self, target: str, mappings: dict) -> str:
+        for k, v in mappings.items():
+            target = target.replace(k, v)
+        return str(Path(target))
+
+    def request(self, method: str = 'POST', url: str = None, data: dict = None, **kwds: Any) -> Response:
+        try:
+            if method.upper() == 'JSON':
+                return requests.request('POST', url, json=data if data else {}, **kwds)
+            else:
+                return requests.request(method, url, data=data, **kwds)
+        except Exception:
+            tb = traceback.format_exc()
+            LOGGER.error(tb)
+            response = requests.Response()
+            response._content = bytes(tb, 'utf-8')
+            response.status_code = 0
+            return response
+
+    def log_response(self, response: Response) -> None:
+        try:
+            msg = f'code: {response.status_code}, content: {response.json()}'
+        except requests.exceptions.JSONDecodeError:
+            msg = f'code: {response.status_code}, content: {response.text}'
+        LOGGER.info(msg)
+
+
+class JobAider(Aider):
+
+    def __init__(self):
+        super().__init__()
+
+    @FRAMEWORK.celery.task(bind=True)
+    def start_job(self, job: ModelBase) -> None:
+        # bind=True, self 는 task 의 instance
+        LOGGER.debug(f'작업을 시작합니다: {job.id if job.id else -1}. {job.task} {job.desc}')
+        if job.task == TASK_KEYS[0]:
+            '''refresh_scan'''
+            plexmateaider = PlexmateAider()
+            rcloneaider = RcloneAider()
+            # refresh
+            if job.scan_mode == SCAN_MODE_KEYS[1] and job.periodic_id > 0:
+                # 주기적 스캔 작업 새로고침
+                targets = plexmateaider.get_periodic_locations(job.periodic_id)
+                for target in targets:
+                    rcloneaider.vfs_refresh(target)
+            else:
+                rcloneaider.vfs_refresh(job.target)
+            # scan
+            plexmateaider.scan(job.scan_mode, job.target, job.periodic_id)
+        elif job.task == TASK_KEYS[1]:
+            '''refresh'''
+            rcloneaider = RcloneAider()
+            rcloneaider.vfs_refresh(job.target)
+            pass
+        elif job.task == TASK_KEYS[2]:
+            '''scan'''
+            plexmateaider = PlexmateAider()
+            plexmateaider.scan(job.scan_mode, job.target, job.periodic_id)
+        elif job.task == TASK_KEYS[3]:
+            '''pm_ready_refresh'''
+            # plexmate
+            plexmateaider = PlexmateAider()
+            plexmateaider.check_scanning(int(PLUGIN.ModelSetting.get(SETTING_PLEXMATE_MAX_SCAN_TIME)))
+            plexmateaider.check_timeover(PLUGIN.ModelSetting.get(SETTING_PLEXMATE_TIMEOVER_RANGE))
+            # refresh
+            targets = plexmateaider.get_scan_targets('READY')
+            if targets:
+                rcloneaider = RcloneAider()
+                for target in targets:
+                    try:
+                        response = rcloneaider.vfs_refresh(target)
+                        result, reason = rcloneaider.is_successful(response)
+                        if result:
+                            reason = None
+                    except Exception as e:
+                        reason = str(e)
+                    if reason:
+                        LOGGER.warning(f'새로고침 실패:  [{target}]: {reason}')
+            else:
+                LOGGER.info(f'새로고침 대상이 없습니다.')
+        elif job.task == TASK_KEYS[4]:
+            '''clear'''
+            plexmateaider = PlexmateAider()
+            plexmateaider.clear_section(job.clear_section, job.clear_type, job.clear_level)
+        elif job.task == TASK_KEYS[5]:
+            '''startup'''
+            ubuntuaider = UbuntuAider()
+            ubuntuaider.startup()
+            pass
+        elif job.task == TASK_KEYS[6]:
+            '''trash'''
+            pass
+        elif job.task in TOOL_TRASH_KEYS:
+            '''trash_refresh_scan'''
+            PLUGIN.ModelSetting.set(TOOL_TRASH_TASK_STATUS, STATUS_KEYS[1])
+            try:
+                plexmateaider = PlexmateAider()
+                if job.task == TOOL_TRASH_KEYS[2]:
+                    plexmateaider.empty_trash(job.section_id)
+                else:
+                    # get trash items
+                    trashes: dict = plexmateaider.get_trashes(job.section_id, 1, -1)
+                    paths = {Path(row['file']).parent for row in trashes}
+                    rcloneaider = RcloneAider()
+                    for path in paths:
+                        if PLUGIN.ModelSetting.get(TOOL_TRASH_TASK_STATUS) == STATUS_KEYS[3]:
+                            LOGGER.info(f'작업을 중지합니다.')
+                            break
+                        if job.task == TOOL_TRASH_KEYS[0] or \
+                        job.task == TOOL_TRASH_KEYS[3] or \
+                        job.task == TOOL_TRASH_KEYS[4]:
+                            LOGGER.debug(f'새로고침 중: {path}')
+                            rcloneaider.vfs_refresh(path)
+                        if job.task == TOOL_TRASH_KEYS[1] or \
+                        job.task == TOOL_TRASH_KEYS[3] or \
+                        job.task == TOOL_TRASH_KEYS[4]:
+                            LOGGER.debug(f'스캔 중: {path}')
+                            plexmateaider.scan(SCAN_MODE_KEYS[2], path)
+                    if job.task == TOOL_TRASH_KEYS[4]:
+                        plexmateaider.empty_trash(job.section_id)
+            except:
+                LOGGER.error(traceback.format_exc())
+            finally:
+                PLUGIN.ModelSetting.set(TOOL_TRASH_TASK_STATUS, STATUS_KEYS[0])
+        LOGGER.debug(f'작업이 끝났습니다: {job.id if job.id else -1}. {job.task} {job.desc}')
+
+    @classmethod
+    def create_schedule_id(cls, job_id: int, middle: str = SCHEDULE) -> str:
+        return f'{PLUGIN.package_name}_{middle}_{job_id}'
+
+    @classmethod
+    def add_schedule(cls, id: int, job: ModelBase = None) -> bool:
+        try:
+            from .models import Job
+            job = job if job else Job.get_by_id(id)
+            schedule_id = cls.create_schedule_id(job.id)
+            if not FRAMEWORK.scheduler.is_include(schedule_id):
+                sch = FrameworkJob(__package__, schedule_id, job.schedule_interval, cls.start_job, job.desc, args=(job,))
+                FRAMEWORK.scheduler.add_job_instance(sch)
+            return True
+        except Exception as e:
+            LOGGER.error(traceback.format_exc())
+            return False
+
+    @classmethod
+    def set_schedule(cls, job_id: int | str, active: bool = False) -> tuple[bool, str]:
+        from .models import Job
+        schedule_id = cls.create_schedule_id(job_id)
+        is_include = FRAMEWORK.scheduler.is_include(schedule_id)
+        job = Job.get_by_id(job_id)
+        schedule_mode = job.schedule_mode if job else FF_SCHEDULE_KEYS[0]
+        if schedule_mode == FF_SCHEDULE_KEYS[2]:
+            if active and is_include:
+                result, data = False, f'이미 일정에 등록되어 있습니다.'
+            elif active and not is_include:
+                result = cls.add_schedule(job_id)
+                data = '일정에 등록했습니다.' if result else '일정에 등록하지 못했어요.'
+            elif not active and is_include:
+                result, data = FRAMEWORK.scheduler.remove_job(schedule_id), '일정에서 제외했습니다.'
+            else:
+                result, data = False, '등록되지 않은 일정입니다.'
+        else:
+            result, data = False, f'등록할 수 없는 일정 방식입니다.'
+        return result, data
 
 
 class SettingAider(Aider):
@@ -234,27 +237,24 @@ class SettingAider(Aider):
         LOGGER.debug(url)
         return requests.post('{}/{}'.format(url, command), auth=(username, password))
 
-    @classmethod
-    def depends(cls, text: str = None):
-        yaml_file = f'{FRAMEWORK.config["path_data"]}/db/flaskfarmaider.yaml'
-        source = f'{pathlib.Path(__file__).parent.resolve()}/files/flaskfarmaider.yaml'
+    def depends(self, text: str = None):
         try:
-            if not os.path.exists(yaml_file):
-                shutil.copyfile(source, yaml_file)
+            if not DEPEND_USER_YAML.exists():
+                shutil.copyfile(DEPEND_SOURCE_YAML, DEPEND_USER_YAML)
             if text:
-                with open(yaml_file, 'w+') as file:
-                    file.writelines(text)
+                with DEPEND_USER_YAML.open(mode='w') as file:
+                    file.write(text)
                     depends = text
             else:
-                with open(yaml_file, 'r') as file:
-                    depends = ('').join(file.readlines())
+                with DEPEND_USER_YAML.open() as file:
+                    depends = file.read()
             return depends
         except Exception as e:
             LOGGER.error(traceback.format_exc())
             if text: return text
             else:
-                with open(source, 'r') as file:
-                    return ('').join(file.readlines())
+                with DEPEND_SOURCE_YAML.open() as file:
+                    return file.read()
 
 
 class BrowserAider(Aider):
@@ -283,10 +283,7 @@ class BrowserAider(Aider):
             'mtime': self.get_readable_time(stats.st_mtime),
         }
 
-    def get_readable_time(self, _time: float) -> str:
-        return datetime.utcfromtimestamp(_time).strftime('%b %d %H:%M')
-
-    def format_file_size(self, size: int, decimals: int = 1, binary_system: bool =True) -> str:
+    def format_file_size(self, size: int, decimals: int = 1, binary_system: bool = True) -> str:
         units = ['B', 'K', 'M', 'G', 'T', 'P', 'E', 'Z']
         largest_unit = 'Y'
         if binary_system:
@@ -298,3 +295,499 @@ class BrowserAider(Aider):
                 return f'{size:.{decimals}f}{unit}'
             size /= step
         return f'{size:.{decimals}f}{largest_unit}'
+
+
+class PluginAider(Aider):
+
+    def __init__(self, name: str):
+        super().__init__(name)
+
+    @property
+    def plugin(self):
+        plugin = FRAMEWORK.PluginManager.get_plugin_instance(self.name)
+        if plugin:
+            return plugin
+        else:
+            raise Exception(f'플러그인을 찾을 수 없습니다: {self.name}')
+
+    def dict_factory(cursor: sqlite3.Cursor, row: tuple) -> dict:
+        d = {}
+        for idx, col in enumerate(cursor.description):
+            d[col[0]] = row[idx]
+        return d
+
+    def check_plugin(func: callable) -> callable:
+        @functools.wraps(func)
+        def wrap(*args, **kwds):
+            if args[0].plugin:
+                return func(*args, **kwds)
+            else:
+                raise Exception(f'플러그인을 찾을 수 없습니다: {args[0].name}')
+        return wrap
+
+    @check_plugin
+    def get_module(self, module: str) -> PluginModuleBase:
+        return self.plugin.logic.get_module(module)
+
+
+class PlexmateAider(PluginAider):
+
+    _plex_server = None
+
+    def __init__(self):
+        super().__init__('plex_mate')
+        self.db = self.plugin.PlexDBHandle
+
+    @property
+    def plex_server(self):
+        if not self._plex_server:
+            self._plex_server = PlexServer(self.plugin.ModelSetting.get('base_url'), self.plugin.ModelSetting.get('base_token'))
+        return self._plex_server
+
+    def get_scan_model(self) -> ModelBase:
+        return self.get_module('scan').web_list_model
+
+    def get_scan_items(self, status: str) -> list[ModelBase]:
+        return self.get_scan_model().get_list_by_status(status)
+
+    def get_scan_targets(self, status: str) -> list[str]:
+        targets = [scan_item.target for scan_item in self.get_scan_items(status)]
+        return self.deduplicate(targets)
+
+    def get_sections(self) -> dict[str, Any]:
+        sections = defaultdict(list)
+        sections[SECTION_TYPE_KEYS[0]] = [{'id': item['id'], 'name': item['name']} for item in self.db.library_sections(section_type=1)]
+        sections[SECTION_TYPE_KEYS[1]] = [{'id': item['id'], 'name': item['name']} for item in self.db.library_sections(section_type=2)]
+        sections[SECTION_TYPE_KEYS[2]] = [{'id': item['id'], 'name': item['name']} for item in self.db.library_sections(section_type=8)]
+        return sections
+
+    def get_periodics(self) -> list[dict[str, Any]]:
+        periodics = []
+        jobs = self.get_module('periodic').get_jobs()
+        for job in jobs:
+            idx = int(job['job_id'].replace('plex_mate_periodic_', '')) + 1
+            section = job.get('섹션ID', -1)
+            section_data = self.db.library_section(section)
+            if section_data:
+                name = section_data.get('name')
+            else:
+                LOGGER.debug(f'skip nonexistent section: {section}')
+                continue
+            periodics.append({'idx': idx, 'name': name, 'desc': job.get('설명', '')})
+        return periodics
+
+    def get_trashes(self, section_id: int, page_no: int = 1, limit: int = 10) -> dict[str, Any]:
+        query = '''
+        SELECT media_items.id, media_items.metadata_item_id, media_items.deleted_at, media_parts.file
+        FROM media_parts, media_items
+        WHERE media_items.deleted_at != ''
+            AND media_items.library_section_id = {section_id}
+            AND media_items.id = media_parts.media_item_id
+        ORDER BY media_parts.file
+        LIMIT {limit} OFFSET {offset}
+        '''
+        offset = (page_no - 1) * limit
+        with sqlite3.connect(self.plugin.ModelSetting.get('base_path_db')) as con:
+            con.row_factory = PluginAider.dict_factory
+            cs = con.cursor()
+            return cs.execute(query.format(section_id=section_id, limit=limit, offset=offset)).fetchall()
+
+    def get_trash_list(self, section_id: int, page_no: int = 1, limit: int = 10) -> dict[str, Any]:
+        '''
+        plex_server = PlexServer(self.plugin.ModelSetting.get('base_url'), self.plugin.ModelSetting.get('base_token'))
+        movie:
+            videos: plexapi.video.Movie = plex_server.library.sectionByID(section_id).search(filters={"trash": True})
+        episode:
+            libtype:
+                movie, show, season, episode, artist, album, track, photoalbum
+                Default is the main library type.
+            videos: plexapi.video.Episode = plex_server.library.sectionByID(section_id).search(libtype='episode', filters={"trash": True})
+        exists:
+            for v in videos:
+                v.reload() # It takes a long time.
+                v.media[0].parts[0].exists
+                v.media[0].parts[0].accessible
+        '''
+        result = {'total': 0, 'limit': limit, 'page': page_no, 'section_id': section_id, 'total_paths': 0, 'data': None}
+        total_rows = self.get_trashes(section_id, 1, -1)
+        paths ={Path(row['file']).parent for row in total_rows}
+        result['total'] = len(total_rows)
+        result['total_paths'] = len(paths)
+        rows = self.get_trashes(section_id, page_no, limit)
+        if len(rows) > 0:
+            for row in rows:
+                row['deleted_at'] = self.get_readable_time(row['deleted_at'])
+            result['data'] = rows
+        return result
+
+    def check_scanning(self, max_scan_time: int) -> None:
+        '''
+        SCANNING 항목 점검.
+
+        PLEX_MATE에서 특정 폴더가 비정상적으로 계속 SCANNING 상태이면 이후 동일 폴더에 대한 스캔 요청이 모두 무시됨.
+        예를 들어 .plexignore 가 있는 폴더는 PLEX_MATE 입장에서 스캔이 정상 종료되지 않기 때문에 해당 파일의 상태가 계속 SCANNING 으로 남게 됨.
+        이 상태에서 동일한 폴더에 위치한 다른 파일이 스캔에 추가되면 스캔을 시도하지 않고 FINISH_ALREADY_IN_QUEUE 로 종료됨.
+
+        ModelScanItem.queue_list가 현재 스캔중인 아이템의 MODEL 객체가 담겨있는 LIST임.
+        클래스 변수라서 스크립트로 리스트의 내용을 조작해 보려고 시도했으나
+        런타임 중 plex_mate.task_scan.Task.filecheck_thread_function() 에서 참조하는 ModelScanItem 과
+        외부 스크립트에서 참조하는 ModelScanItem 의 메모리 주소가 다름을 확인함.
+        flask의 app_context, celery의 Task 데코레이터, 다른 플러그인에서 접근을 해 보았지만 효과가 없었음.
+        그래서 외부에서 접근한 ModelScanItem.queue_list는 항상 비어 있는 상태임.
+
+        런타임 queue_list에서 스캔 오류 아이템을 제외시키기 위해 편법을 사용함.
+
+        - 스캔 오류라고 판단된 item을 db에서 삭제하고 동일한 id로 새로운 item을 db에 생성
+        - ModelScanItem.queue_list에는 기존 item의 객체가 아직 남아 있음.
+        - 다음 파일체크 단계에서 queue_list에 남아있는 기존 item 정보로 인해 새로운 item의 STATUS가 FINISH_ALREADY_IN_QUEUE로 변경됨.
+        - FINISH_* 상태가 되면 ModelScanItem.remove_in_queue()가 호출됨.
+        - 새로운 item 객체는 기존 item 객체의 id를 가지고 있기 때문에 queue_list에서 기존 item 객체가 제외됨.
+
+        주의: 계속 SCANNING 상태로 유지되는 항목은 확인 후 조치.
+        '''
+        model = self.get_scan_model()
+        scans = self.get_scan_items('SCANNING')
+        if scans:
+            for scan in scans:
+                if int((datetime.now() - scan.process_start_time).total_seconds() / 60) >= max_scan_time:
+                    LOGGER.warning(f'스캔 시간 {max_scan_time}분 초과: {scan.target}')
+                    LOGGER.warning(f'스캔 QUEUE에서 제외: {scan.target}')
+                    model.delete_by_id(scan.id)
+                    new_item = model(scan.target)
+                    new_item.id = scan.id
+                    new_item.save()
+
+    def check_timeover(self, item_range: str) -> None:
+        '''
+        FINISH_TIMEOVER 항목 점검
+        ID가 item_range 범위 안에 있는 TIMEOVER 항목들을 다시 READY 로 변경
+        주의: 계속 시간 초과로 뜨는 항목은 확인 후 수동으로 조치
+        '''
+        overs = self.get_scan_items('FINISH_TIMEOVER')
+        if overs:
+            start_id, end_id = list(map(int, item_range.split('~')))
+            for over in overs:
+                if over.id in range(start_id, end_id + 1):
+                    LOGGER.warning(f'READY 로 상태 변경: {over.id} {over.target}')
+                    over.set_status('READY', save=True)
+
+    def scan(self, scan_mode: str, target: str = None, periodic_id: int = -1) -> None:
+        if scan_mode == SCAN_MODE_KEYS[2]:
+            mappings = self.parse_mappings(PLUGIN.ModelSetting.get(SETTING_PLEXMATE_PLEX_MAPPING))
+            target = self.update_path(target, mappings)
+            rows = self.db.select('SELECT library_section_id, root_path FROM section_locations')
+            founds = set()
+            for row in rows:
+                root = row['root_path']
+                longer = target if len(target) >= len(root) else root
+                shorter = target if len(target) < len(root) else root
+                if longer.startswith(shorter):
+                    founds.add(int(row['library_section_id']))
+            if founds:
+                LOGGER.debug(f'섹션 ID 확인: {target} in {founds}')
+                for section_id in founds:
+                    section = self.plex_server.library.sectionByID(section_id)
+                    max_seconds = 300
+                    start = time.time()
+                    section.update(path=target)
+                    section.reload()
+                    LOGGER.debug(f'스캔 중: {target}')
+                    '''
+                    스캔 추적을 섹션 상태에 의존
+                    다른 곳에서 동일 섹션을 스캔 시도할 경우?
+                    '''
+                    while section.refreshing:
+                        if (time.time() - start) >= max_seconds:
+                            break
+                        time.sleep(1)
+                        section.reload()
+                        if int(time.time() - start) % 30 == 0:
+                            LOGGER.debug(f'스캔 중: {target} ... {(time.time() - start):.1f}s')
+                    if time.time() - start > max_seconds:
+                        LOGGER.warning(f'스캔 대기 시간 초과: {target} ... {(time.time() - start):.1f}s')
+                    else:
+                        LOGGER.info(f'스캔 완료: {target} ... {(time.time() - start):.1f}s')
+            else:
+                LOGGER.error(f'섹션 ID를 찾을 수 없습니다: {target}')
+        elif scan_mode == SCAN_MODE_KEYS[1]:
+            module = self.get_module('periodic')
+            scan_job = self.get_periodic_job(periodic_id)
+            if scan_job:
+                LOGGER.debug(f'주기적 스캔 작업 실행: {scan_job}')
+                module.one_execute(periodic_id - 1)
+        else:
+            scan_item = self.get_scan_model()(target)
+            scan_item.save()
+            LOGGER.info(f'plex_mate 스캔 ID: {scan_item.id}')
+
+    def get_locations_by_id(self, section_id: int) -> list[str]:
+        return [location.get('root_path') for location in self.db.section_location(library_id=section_id)]
+
+    def get_section_by_id(self, section_id: int) -> dict[str, Any]:
+        return self.db.library_section(section_id)
+
+    def get_periodic_locations(self, periodic_id: int) -> list[str]:
+        job = self.get_periodic_job(periodic_id)
+        if job.get('폴더'):
+            targets = list(job.get('폴더'))
+        else:
+            try:
+                targets = self.get_locations_by_id(job.get('섹션ID'))
+            except Exception:
+                LOGGER.error(traceback.format_exc())
+                targets = []
+        return targets
+
+    def get_periodic_job(self, periodic_id: int) -> dict:
+        mod = self.get_module('periodic')
+        periodic_id -= 1
+        try:
+            job = mod.get_jobs()[periodic_id]
+        except IndexError:
+            LOGGER.error(f'주기적 스캔 작업을 찾을 수 없습니다: {periodic_id + 1}')
+            job = {}
+        return job
+
+    def clear_section(self, section_id: int, clear_type: str, clear_level: str) -> None:
+        mod = self.get_module('clear')
+        page = mod.get_page(clear_type)
+        info = f'{clear_level}, {self.get_section_by_id(section_id).get("name")}'
+        LOGGER.info(f'파일 정리 시작: {info}')
+        page.task_interface(clear_level, section_id, 'false').join()
+        LOGGER.info(f'파일 정리 종료: {info}')
+
+    def delete_media(self, meta_id: int, media_id: int) -> str:
+        """
+        #/library/metadata/508092/media/562600
+        plex_url = self.plugin.ModelSetting.get('base_url')
+        plex_token = self.plugin.ModelSetting.get('base_token')
+        url = f'{plex_url}/library/metadata/{meta_id}/media/{media_id}'
+        params = {
+            'X-Plex-Token': plex_token
+        }
+        response = self.request('DELETE', url, params=params)
+        LOGGER.debug(f'미디어 ID: {media_id}, 응답 코드: {response.status_code}')
+        if str(response.status_code).startswith('2'):
+            return '삭제했습니다.'
+        else:
+            return '오류가 발생했습니다.'
+        """
+        try:
+            video = self.plex_server.library.fetchItem(meta_id, Media__id=media_id).reload()
+            for media in video.media:
+                if media.id == media_id:
+                    non_exists = []
+                    for part in media.parts:
+                        if not part.exists:
+                            non_exists.append(part.file)
+                    if non_exists:
+                        LOGGER.debug(f'delete: {non_exists}')
+                        media.delete()
+            return '삭제했습니다.'
+        except:
+            LOGGER.error(traceback.format_exc())
+            return f'오류가 발생했습니다.'
+
+    def empty_trash(self, section_id: int) -> None:
+        LOGGER.debug(f'휴지통을 비우는 중입니다: {section_id}')
+        self.plex_server.library.sectionByID(section_id).emptyTrash()
+
+
+class RcloneAider(Aider):
+
+    def __init__(self):
+        super().__init__()
+
+    def get_metadata_cache(self, fs: str) -> dict[str, Any]:
+        return self.vfs_stats(fs).json().get("metadataCache")
+
+    def vfs_stats(self, fs: str) -> Response:
+        return self.command("vfs/stats", data={"fs": fs})
+
+    def command(self, command: str, data: dict = None) -> Response:
+        LOGGER.debug(f'command: {command}, parameters: {data}')
+        return self.request(
+            "JSON",
+            f'{PLUGIN.ModelSetting.get(SETTING_RCLONE_REMOTE_ADDR)}/{command}',
+            data=data,
+            auth=(PLUGIN.ModelSetting.get(SETTING_RCLONE_REMOTE_USER), PLUGIN.ModelSetting.get(SETTING_RCLONE_REMOTE_PASS))
+        )
+
+    def _vfs_refresh(self, remote_path: str, recursive: bool = False, fs: str = None) -> Response:
+        data = {
+            'recursive': str(recursive).lower(),
+            'fs': fs if fs else PLUGIN.ModelSetting.get(SETTING_RCLONE_REMOTE_VFS),
+            'dir': remote_path
+        }
+        LOGGER.debug(f'새로고침 전: {self.get_metadata_cache(data["fs"])}')
+        response = self.command('vfs/refresh', data=data)
+        self.log_response(response)
+        LOGGER.debug(f'새로고침 후: {self.get_metadata_cache(data["fs"])}')
+        return response
+
+    def vfs_refresh(self, local_path: str) -> Response:
+        # 이미 존재하는 파일이면 패스, 존재하지 않은 파일/폴더, 존재하는 폴더이면 진행
+        local_path = Path(local_path)
+        if local_path.is_file():
+            response = requests.Response()
+            response.status_code = 0
+            reason = 'already exists'
+            response._content = bytes(reason, 'utf-8')
+            LOGGER.debug(f'{reason}: {local_path}')
+        else:
+            # vfs/refresh 용 존재하는 경로 찾기
+            test_dirs = [local_path]
+            already_exists = test_dirs[0].exists()
+            while not test_dirs[-1].exists():
+                test_dirs.append(test_dirs[-1].parent)
+            LOGGER.debug(f"testing: {str(test_dirs)}")
+            mappings = self.parse_mappings(PLUGIN.ModelSetting.get(SETTING_RCLONE_MAPPING))
+            while test_dirs:
+                # vfs/refresh 후
+                response = self._vfs_refresh(self.update_path(str(test_dirs[-1]), mappings))
+                # 타겟이 존재하는지 점검
+                if local_path.exists():
+                    LOGGER.debug(f'EXISTS: {local_path}')
+                    # 존재하지 않았던 폴더면 vfs/refresh
+                    if not local_path.is_file() and not already_exists:
+                        LOGGER.debug(f'is already exists? : {already_exists}')
+                        self._vfs_refresh(self.update_path(str(local_path), mappings))
+                        # 새로운 폴더를 새로고침 후 한번 더 타겟 경로 존재 점검
+                        if not local_path.exists() and len(test_dirs) > 1: continue
+                    break
+                else:
+                    result, reason = self.is_successful(response)
+                    if not result:
+                        LOGGER.error(f'새로고침 실패: {reason}: {test_dirs[-1]}')
+                        break
+                    LOGGER.debug(f'still not exists...')
+                # 타겟이 아직 존재하지 않으면 다음 상위 경로로 시도
+                test_dirs.pop()
+        return response
+
+    def is_successful(self, response: Response) -> tuple[bool, str]:
+        if not str(response.status_code).startswith('2'):
+            return False, f'status code: {response.status_code}, content: {response.text}'
+        try:
+            # {'error': '', ...}
+            # {'result': {'/path/to': 'Invalid...'}}
+            # {'result': {'/path/to': 'OK'}}
+            _json = response.json()
+            if _json.get('result'):
+                result = list(_json.get('result').values())[0]
+                if result == 'OK':
+                    return True, result
+                else:
+                    return False, result
+            else:
+                return False, _json.get('error')
+        except Exception as e:
+            LOGGER.error(str(e))
+            return False, response.text
+
+
+class StatupAider(Aider):
+
+    def __init__(self):
+        super().__init__()
+
+    def sub_run(self, *args: tuple[str],
+                stdout: int = subprocess.PIPE, stderr: int = subprocess.STDOUT,
+                encoding: str = 'utf-8', **kwds: dict[str, Any]) -> CompletedProcess:
+        startup_executable = PLUGIN.ModelSetting.get(SETTING_STARTUP_EXECUTABLE)
+        startup_executable = True if startup_executable.lower() == 'true' else False
+        if not startup_executable:
+            msg = f'실행이 허용되지 않았어요.'
+            LOGGER.error(msg)
+            return subprocess.CompletedProcess(args, returncode=1, stderr='', stdout=msg)
+        else:
+            try:
+                # shell=True는 의도치 않은 명령이 실행될 수 있으니 항상 False로...
+                if kwds.get('shell'):
+                    kwds['shell'] = False
+                return subprocess.run(args, stdout=stdout, stderr=stderr, encoding=encoding, **kwds)
+            except Exception as e:
+                LOGGER.error(str(e))
+                return subprocess.CompletedProcess(args, returncode=1, stderr='', stdout=str(e))
+
+    def startup(self) -> None:
+        pass
+
+
+class UbuntuAider(StatupAider):
+
+    def __init__(self):
+        super().__init__()
+
+    def startup(self) -> None:
+        if platform.system().lower() != 'linux':
+            LOGGER.warning(f'실행할 수 없는 OS 환경입니다: {platform.system()}')
+            return
+
+        require_plugins = set()
+        require_packages = set()
+        require_commands = set()
+
+        plugins_installed = [plugin_name for plugin_name in FRAMEWORK.PluginManager.all_package_list.keys()]
+        depends = yaml.safe_load(SettingAider().depends()).get('dependencies')
+
+        # plugin by plugin
+        for plugin in plugins_installed:
+           # append this plugin's requires to
+            depend_plugins = depends.get(plugin, {}).get('plugins', [])
+            for depend in depend_plugins:
+                if depend not in plugins_installed:
+                    require_plugins.add(depend)
+
+            # append this plugin's packages to
+            for depend in depends.get(plugin, {}).get('packages', []):
+                require_packages.add(depend)
+
+            # append this plugin's commands to
+            for depend in depends.get(plugin, {}).get('commands', []):
+                require_commands.add(depend)
+
+        executable_commands = []
+        # 1. Commands from the config file
+        setiing_commands = self.split_by_newline(PLUGIN.ModelSetting.get(SETTING_STARTUP_COMMANDS))
+        if setiing_commands:
+            for command in setiing_commands:
+                executable_commands.append(command)
+
+        # 2. Commands of installing required packages
+        if require_packages:
+            for req in require_packages:
+                command = f'apt-get install -y {req}'
+                executable_commands.append(command)
+
+        # 3. Commands from plugin dependencies of the config file
+        if require_commands:
+            for req in require_commands:
+                executable_commands.append(req)
+
+        # 4. Commands of installing required plugins
+        if require_plugins:
+            for plugin in require_plugins:
+                LOGGER.info(f'설치 예정 플러그인: {plugin}')
+
+        for command in executable_commands:
+            LOGGER.info(f'실행 예정 명령어: {command}')
+
+        # run commands
+        startup_executable = PLUGIN.ModelSetting.get(SETTING_STARTUP_EXECUTABLE)
+        startup_executable = True if startup_executable.lower() == 'true' else False
+        if startup_executable:
+            for command in executable_commands:
+                command = shlex.split(command)
+                result: CompletedProcess = self.sub_run(*command, timeout=int(PLUGIN.ModelSetting.get(SETTING_STARTUP_TIMEOUT)))
+                if result.returncode == 0:
+                    msg = '성공'
+                else:
+                    msg = result.stdout
+                LOGGER.info(f'실행 결과 {command}: {msg}')
+
+            for plugin in require_plugins:
+                result = FRAMEWORK.PluginManager.plugin_install(depends.get(plugin, {"repo": "NO INFO."}).get("repo"))
+                LOGGER.info(result.get('msg'))
+        else:
+            LOGGER.warning(f'실행이 허용되지 않았어요.')

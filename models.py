@@ -2,51 +2,15 @@ from datetime import datetime
 import traceback
 from typing import Any
 
-from werkzeug.local import LocalProxy # type: ignore
-from flask_sqlalchemy.query import Query # type: ignore
-from sqlalchemy import desc # type: ignore
-
-from plugin.model_base import ModelBase # type: ignore
-
-from .setup import PLUGIN, FRAMEWORK, SCHEDULE, LOGGER
-
-
-TASK_KEYS = ('refresh_scan', 'refresh', 'scan', 'pm_ready_refresh', 'clear', 'startup')
-TASKS = {
-    TASK_KEYS[0]: {'key': TASK_KEYS[0], 'name': '새로고침 후 스캔', 'desc': 'Rclone 리모트 콘트롤 서버에 vfs/refresh 요청 후 플렉스 스캔', 'enable': False},
-    TASK_KEYS[1]: {'key': TASK_KEYS[1], 'name': '새로고침', 'desc': 'Rclone 리모트 콘트롤 서버에 vfs/refresh 요청', 'enable': False},
-    TASK_KEYS[2]: {'key': TASK_KEYS[2], 'name': '스캔', 'desc': '플렉스 스캔을 요청', 'enable': False},
-    TASK_KEYS[3]: {'key': TASK_KEYS[3], 'name': 'Plexmate Ready 새로고침', 'desc': 'Plexmate의 READY 상태인 항목들을 Rclone 리모트 서버에 vfs/refresh 요청', 'enable': False},
-    TASK_KEYS[4]: {'key': TASK_KEYS[4], 'name': 'Plexmate 파일 정리', 'desc': 'Plexmate의 라이브러리 파일 정리를 일정으로 등록', 'enable': False},
-    TASK_KEYS[5]: {'key': TASK_KEYS[5], 'name': '시작 스크립트', 'desc': 'Flaskfarm 시작시 필요한 OS 명령어를 실행', 'enable': False},
-}
-
-STATUS_KEYS = ('ready', 'running', 'finish')
-STATUSES = {
-    STATUS_KEYS[0]: {'key': STATUS_KEYS[0], 'name': '대기중', 'desc': None},
-    STATUS_KEYS[1]: {'key': STATUS_KEYS[1], 'name': '실행중', 'desc': None},
-    STATUS_KEYS[2]: {'key': STATUS_KEYS[2], 'name': '완료', 'desc': None},
-}
-
-FF_SCHEDULE_KEYS = ('none', 'startup', 'schedule')
-FF_SCHEDULES = {
-    FF_SCHEDULE_KEYS[0]: {'key': FF_SCHEDULE_KEYS[0], 'name': '없음', 'desc': None},
-    FF_SCHEDULE_KEYS[1]: {'key': FF_SCHEDULE_KEYS[1], 'name': '시작시 실행', 'desc': None},
-    FF_SCHEDULE_KEYS[2]: {'key': FF_SCHEDULE_KEYS[2], 'name': '시간 간격', 'desc': None},
-}
-
-SCAN_MODE_KEYS = ('plexmate', 'periodic', 'web')
-SCAN_MODES = {
-    SCAN_MODE_KEYS[0]: {'key': SCAN_MODE_KEYS[0], 'name': 'Plexmate 스캔', 'desc': None},
-    SCAN_MODE_KEYS[1]: {'key': SCAN_MODE_KEYS[1], 'name': '주기적 스캔', 'desc': None},
-    SCAN_MODE_KEYS[2]: {'key': SCAN_MODE_KEYS[2], 'name': 'Plex Web API', 'desc': None},
-}
+from .aiders import JobAider
+from .setup import PLUGIN, LOGGER, LocalProxy, Query, desc, ModelBase
+from .constants import FRAMEWORK, FF_SCHEDULE_KEYS, SCAN_MODE_KEYS, STATUS_KEYS, SCHEDULE, TASK_KEYS, TASKS
 
 
 class Job(ModelBase):
 
     P = PLUGIN
-    __tablename__ = f'{__package__}_jobs'
+    __tablename__ = f'{PLUGIN.package_name}_jobs'
     __table_args__ = {'mysql_collate': 'utf8_general_ci'}
     __bind_key__ = PLUGIN.package_name
 
@@ -69,7 +33,7 @@ class Job(ModelBase):
     clear_section = FRAMEWORK.db.Column(FRAMEWORK.db.Integer)
     clear_level = FRAMEWORK.db.Column(FRAMEWORK.db.String)
 
-    def __init__(self, task: str, schedule_mode: str = FF_SCHEDULE_KEYS[0], schedule_auto_start: bool = False,
+    def __init__(self, task: str = '', schedule_mode: str = FF_SCHEDULE_KEYS[0], schedule_auto_start: bool = False,
                  desc: str = '', target: str = '', recursive: bool = False,
                  vfs: str = '', scan_mode: str = SCAN_MODE_KEYS[0], periodic_id: int = -1,
                  clear_type: str = '', clear_level: str = '', clear_section: int = -1):
@@ -88,6 +52,75 @@ class Job(ModelBase):
         self.clear_type = clear_type
         self.clear_level = clear_level
         self.clear_section = clear_section
+
+    def update(self, info: dict) -> ModelBase:
+        self.task = info.get('task', self.task)
+        self.schedule_mode = info.get('schedule_mode', self.schedule_mode)
+        self.schedule_auto_start = info.get('schedule_auto_start', self.schedule_auto_start)
+        self.desc = info.get('desc', self.desc)
+        self.target = info.get('target', self.target)
+        self.recursive = info.get('recursive', self.recursive)
+        self.vfs = info.get('vfs', self.vfs)
+        self.scan_mode = info.get('scan_mode', self.scan_mode)
+        self.periodic_id = info.get('periodic_id', self.periodic_id)
+        self.clear_type = info.get('clear_type', self.clear_type)
+        self.clear_level = info.get('clear_level', self.clear_level)
+        self.clear_section = info.get('clear_section', self.clear_section)
+        return self
+
+    @classmethod
+    def update_formdata(cls, formdata: dict[str, list]) -> ModelBase:
+        _id = int(formdata.get('id')[0]) if formdata.get('id') else -1
+        if _id == -1:
+            model = Job()
+        else:
+            model = cls.get_by_id(_id)
+        try:
+            model.task = formdata.get('sch-task')[0] if formdata.get('sch-task') else TASK_KEYS[0]
+            desc = formdata.get('sch-description')[0] if formdata.get('sch-description') else ''
+            model.desc = desc if desc != '' else f'{TASKS[model.task]["name"]}'
+            model.schedule_mode = formdata.get('sch-schedule-mode')[0] if formdata.get('sch-schedule-mode') else FF_SCHEDULE_KEYS[0]
+            model.schedule_interval = formdata.get('sch-schedule-interval')[0] if formdata.get('sch-schedule-interval') else '60'
+            if model.task == TASK_KEYS[5]:
+                model.target = ''
+                model.schedule_interval = '매 시작'
+            elif model.task == TASK_KEYS[3]:
+                model.target = ''
+            else :
+                model.target = formdata.get('sch-target-path')[0] if formdata.get('sch-target-path') else '/'
+            model.vfs = formdata.get('sch-vfs')[0] if formdata.get('sch-vfs') else 'remote:'
+            recursive = formdata.get('sch-recursive')[0] if formdata.get('sch-recursive') else 'false'
+            model.recursive = True if recursive.lower() == 'true' else False
+            schedule_auto_start = formdata.get('sch-schedule-auto-start')[0] if formdata.get('sch-schedule-auto-start') else 'false'
+            model.schedule_auto_start = True if schedule_auto_start.lower() == 'true' else False
+            model.scan_mode = formdata.get('sch-scan-mode')[0] if formdata.get('sch-scan-mode') else SCAN_MODE_KEYS[0]
+            model.periodic_id = int(formdata.get('sch-scan-mode-periodic-id')[0]) if formdata.get('sch-scan-mode-periodic-id') else -1
+            model.clear_type = formdata.get('sch-clear-type')[0] if formdata.get('sch-clear-type') else ''
+            model.clear_level = formdata.get('sch-clear-level')[0] if formdata.get('sch-clear-level') else ''
+            model.clear_section = int(formdata.get('sch-clear-section')[0]) if formdata.get('sch-clear-section') else -1
+
+            schedule_id = JobAider.create_schedule_id(model.id)
+            is_include = FRAMEWORK.scheduler.is_include(schedule_id)
+            if is_include:
+                FRAMEWORK.scheduler.remove_job(schedule_id)
+                if model.schedule_mode == FF_SCHEDULE_KEYS[2]:
+                    LOGGER.debug(f'일정에 재등록합니다: {schedule_id}')
+                    JobAider.add_schedule(model.id)
+            model.save()
+        except Exception:
+            LOGGER.error(traceback.format_exc())
+            LOGGER.error('작업을 저장하지 못했습니다.')
+        finally:
+            return model
+
+    @classmethod
+    def get_job(cls, id: int = -1, info: dict = None) -> ModelBase:
+        if id > 0:
+            return cls.get_by_id(id)
+        elif info:
+            return Job().update(info)
+        else:
+            return Job()
 
     @classmethod
     def make_query(cls, request: LocalProxy, order: str ='desc', search: str = '', option1: str = 'all', option2: str = 'all') -> Query:
@@ -137,8 +170,8 @@ class Job(ModelBase):
             ret['list'] = []
             for item in lists:
                 item = item.as_dict()
-                item['is_include'] = True if FRAMEWORK.scheduler.is_include(cls.create_schedule_id(item['id'])) else False
-                item['is_running'] = True if FRAMEWORK.scheduler.is_running(cls.create_schedule_id(item['id'])) else False
+                item['is_include'] = True if FRAMEWORK.scheduler.is_include(JobAider.create_schedule_id(item['id'])) else False
+                item['is_running'] = True if FRAMEWORK.scheduler.is_running(JobAider.create_schedule_id(item['id'])) else False
                 ret['list'].append(item)
             ret['paging'] = cls.get_paging_info(count, page, page_size)
             PLUGIN.ModelSetting.set(f'{SCHEDULE}_last_list_option', f'{order}|{page}|{search}|{option1}|{option2}')
@@ -146,7 +179,3 @@ class Job(ModelBase):
         except Exception as e:
             LOGGER.error(f"Exception:{str(e)}")
             LOGGER.error(traceback.format_exc())
-
-    @classmethod
-    def create_schedule_id(cls, job_id: int) -> str:
-        return f'{__package__}_{job_id}'

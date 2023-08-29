@@ -1,0 +1,23 @@
+{% extends 'flaskfarmaider.html' %}
+{% block content %}
+<div id="markdown">
+    {{ args.manual }}
+</div>
+
+<script src="https://cdn.jsdelivr.net/gh/google/code-prettify@master/loader/run_prettify.js?autorun=true&lang=css&lang=yaml&skin=sunburst"></script>
+<script src="{{ url_for('static', filename='js/showdown_2.1.0.js') }}"></script>
+<script src="{{ url_for('static', filename='js/showdown-prettify.js') }}"></script>
+<link href="{{ url_for('static', filename='css/showdown.css') }}" rel="stylesheet">
+
+<script type="text/javascript">
+    $(function() {
+        var converter = new showdown.Converter({extensions: ['prettify']});
+        converter.setOption('tables', true);
+        converter.setOption('strikethrough', true);
+        converter.setOption('ghCodeBlocks',true);
+        text = $('#markdown').text();
+        html = converter.makeHtml(text);
+        $('#markdown').html(html);
+    });
+  </script>
+{% endblock %}

@@ -1,5 +1,5 @@
 title: 'Flaskfarmaider'
-version: '0.9.3'
+version: '0.9.6'
 package_name: 'flaskfarmaider'
 developer: 'halfaider'
 description: 'Flaskfarm 보조 플러그인'
@@ -8,3 +8,5 @@ more: 'https://raw.githubusercontent.com/halfaider/flaskfarmaider/main/README.md
 require_plugin:
   - package_name: 'plex_mate'
     home: 'https://github.com/flaskfarm/plex_mate'
+require_os:
+  - 'linux'
