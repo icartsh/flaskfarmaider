@@ -3,17 +3,24 @@ import traceback
 from typing import Any
 from urllib.parse import parse_qs
 from threading import Thread
+import sqlite3
 
 from .models import Job
 from .aiders import BrowserAider, SettingAider, JobAider, PlexmateAider
 from .setup import PLUGIN, LOGGER, Response, render_template, jsonify, LocalProxy, PluginBase, PluginModuleBase, PluginPageBase
-from .constants import SETTING, FRAMEWORK, TASK_KEYS, SCAN_MODE_KEYS, SCHEDULE, SECTION_TYPE_KEYS, STATUSES, README, TOOL
+from .constants import SETTING, FRAMEWORK, TASK_KEYS, SCAN_MODE_KEYS, SCHEDULE, SECTION_TYPE_KEYS, STATUSES, README, TOOL, DB_VERSIONS
 from .constants import TASKS, STATUS_KEYS, FF_SCHEDULE_KEYS, SCAN_MODES, SECTION_TYPES, FF_SCHEDULES, TOOL_TRASH, MANUAL
 from .constants import SETTING_DB_VERSION, SETTING_RCLONE_REMOTE_ADDR, SETTING_RCLONE_REMOTE_VFS, SETTING_RCLONE_REMOTE_USER
 from .constants import SETTING_RCLONE_REMOTE_PASS, SETTING_RCLONE_MAPPING, SETTING_PLEXMATE_MAX_SCAN_TIME, SETTING_PLEXMATE_TIMEOVER_RANGE
 from .constants import SETTING_PLEXMATE_PLEX_MAPPING, SETTING_STARTUP_EXECUTABLE, SETTING_STARTUP_COMMANDS, SETTING_STARTUP_TIMEOUT, SETTING_STARTUP_DEPENDENCIES
 from .constants import SCHEDULE_WORKING_DIRECTORY, SCHEDULE_LAST_LIST_OPTION, TOOL_TRASH_KEYS, TOOL_TRASHES, TOOL_TRASH_TASK_STATUS
+from . import migrations
 
+
+def thread_func(func, *args, **kwds):
+    th = Thread(target=func, args=args, kwargs=kwds, daemon=True)
+    th.start()
+    return th
 
 class Base():
 
@@ -22,8 +29,8 @@ class Base():
 
     def set_recent_menu(self, req: LocalProxy) -> None:
         current_menu = '|'.join(req.path[1:].split('/')[1:])
-        LOGGER.debug(f'current_menu: {current_menu}')
         if not current_menu == PLUGIN.ModelSetting.get('recent_menu_plugin'):
+            LOGGER.debug(f'현재 메뉴 위치 저장: {current_menu}')
             PLUGIN.ModelSetting.set('recent_menu_plugin', current_menu)
 
     def get_template_args(self) -> dict[str, Any]:
@@ -36,7 +43,6 @@ class Base():
 
     def prerender(self, sub: str, req: LocalProxy) -> None:
         self.set_recent_menu(req)
-        LOGGER.debug(f'rendering: {self.name}')
 
     def task_command(self, task: str, target: str, recursive: str, scan: str) -> tuple[bool, str]:
         if recursive:
@@ -58,8 +64,9 @@ class Base():
                 'scan_mode': scan_mode,
                 'periodic_id': int(periodic_id) if periodic_id else -1,
             }
-            JobAider().start_job(Job.get_job(info=job))
-            result, msg = True, '작업이 끝났습니다.'
+            #JobAider().start_job(Job.get_job(info=job))
+            thread_func(JobAider().start_job, Job.get_job(info=job))
+            result, msg = True, '작업을 실행했습니다.'
         else:
             result, msg = False, '경로 정보가 없습니다.'
         return result, msg
@@ -97,9 +104,9 @@ class BaseModule(Base, PluginModuleBase):
             else:
                 args = self.get_template_args()
                 return render_template(f'{PLUGIN.package_name}_{self.name}.html', args=args)
-        except Exception as e:
+        except:
             LOGGER.error(traceback.format_exc())
-        return render_template('sample.html', title=f"process_menu() - {PLUGIN.package_name}/{self.name}/{sub}")
+            return render_template('sample.html', title=f"process_menu() - {PLUGIN.package_name}/{self.name}/{sub}")
 
     def process_ajax(self, sub: str, req: LocalProxy):
         '''override'''
@@ -209,7 +216,7 @@ class BasePage(Base, PluginPageBase):
             return render_template(f'{PLUGIN.package_name}_{self.parent.name}_{self.name}.html', args=args)
         except Exception as e:
             self.P.logger.error(traceback.format_exc())
-        return render_template('sample.html', title=f"process_menu() - {PLUGIN.package_name}/{self.parent.name}/{self.name}")
+            return render_template('sample.html', title=f"process_menu() - {PLUGIN.package_name}/{self.parent.name}/{self.name}")
 
     def process_ajax(self, sub: str, req: LocalProxy):
         '''override'''
@@ -314,126 +321,29 @@ class Setting(BaseModule):
 
     def migration(self):
         '''override'''
-        try:
-            import sqlite3
-            with FRAMEWORK.app.app_context():
-                db_file = FRAMEWORK.app.config['SQLALCHEMY_BINDS'][PLUGIN.package_name].replace('sqlite:///', '').split('?')[0]
-                current_db_ver = PLUGIN.ModelSetting.get(SETTING_DB_VERSION)
-                LOGGER.debug(f'current db version: {current_db_ver}')
-                connection = sqlite3.connect(db_file)
-                connection.row_factory = sqlite3.Row
-                cs = connection.cursor()
+        with FRAMEWORK.app.app_context():
+            current_db_ver = PLUGIN.ModelSetting.get(SETTING_DB_VERSION)
+            db_file = FRAMEWORK.app.config['SQLALCHEMY_BINDS'][PLUGIN.package_name].replace('sqlite:///', '').split('?')[0]
+            LOGGER.debug(f'DB 버전: {current_db_ver}')
+            with sqlite3.connect(db_file) as conn:
+                conn.row_factory = sqlite3.Row
+                cs = conn.cursor()
                 table_jobs = f'{PLUGIN.package_name}_jobs'
-                LOGGER.debug(f'vacuum db')
+                # DB 볼륨 정리
                 cs.execute(f'VACUUM;').fetchall()
-                if current_db_ver == '1':
-                    LOGGER.debug('start migration from 1 to 2...')
-                    # check old table
-                    old_table_rows = cs.execute(f"SELECT count(*) FROM sqlite_master WHERE type='table' AND name='job'").fetchall()
-                    if old_table_rows[0]['count(*)']:
-                        LOGGER.debug('old table exists!')
-                        cs.execute(f'ALTER TABLE "job" RENAME TO "job_OLD_TABLE"').fetchall()
-                        new_table_rows = cs.execute(f"SELECT count(*) FROM sqlite_master WHERE type='table' AND name='{table_jobs}'").fetchall()
-                        if new_table_rows[0]['count(*)']:
-                            # drop new blank table
-                            LOGGER.debug('new blank table exists!')
-                            cs.execute(f'DROP TABLE {table_jobs}').fetchall()
-                        # rename table
-                        cs.execute(f'ALTER TABLE "job_OLD_TABLE" RENAME TO "{table_jobs}"').fetchall()
-
-                        # add/drop columns
-                        rows = cs.execute(f'SELECT name FROM pragma_table_info("{table_jobs}")').fetchall()
-                        cols = [row['name'] for row in rows]
-                        if 'commands' in cols:
-                            cs.execute(f'ALTER TABLE "{table_jobs}" DROP COLUMN "commands"').fetchall()
-                        if 'scan_mode' not in cols:
-                            cs.execute(f'ALTER TABLE "{table_jobs}" ADD COLUMN "scan_mode" VARCHAR').fetchall()
-                        if 'periodic_id' not in cols:
-                            cs.execute(f'ALTER TABLE "{table_jobs}" ADD COLUMN "periodic_id" INTEGER').fetchall()
-
-                        # check before seting values
-                        rows = cs.execute(f'SELECT name FROM pragma_table_info("{table_jobs}")').fetchall()
-                        cols = [row['name'] for row in rows]
-                        LOGGER.debug(f'table cols: {cols}')
-                        rows = cs.execute(f'SELECT * FROM "{table_jobs}"').fetchall()
-                        for row in rows:
-                            LOGGER.debug(f"{row['id']} | {row['ctime']} | {row['task']} | {row['desc']} | {row['target']} | {row['scan_mode']} | {row['periodic_id']}")
-
-                        LOGGER.debug('========== set values ==========')
-
-                        # set values
-                        rows = cs.execute(f'SELECT * FROM "{table_jobs}"').fetchall()
-                        for row in rows:
-                            if not row['scan_mode']:
-                                cs.execute(f'UPDATE {table_jobs} SET scan_mode = "plexmate" WHERE id = {row["id"]}').fetchall()
-                            if not row['periodic_id']:
-                                cs.execute(f'UPDATE {table_jobs} SET periodic_id = -1 WHERE id = {row["id"]}').fetchall()
-
-                            if row['task'] == 'refresh':
-                                pass
-                            elif row['task'] == 'scan':
-                                # Plex Web API로 스캔 요청
-                                cs.execute(f'UPDATE {table_jobs} SET scan_mode = "web" WHERE id = {row["id"]}').fetchall()
-                            elif row['task'] == 'startup':
-                                pass
-                            elif row['task'] == 'pm_scan':
-                                # Plexmate로 스캔 요청
-                                cs.execute(f'UPDATE {table_jobs} SET task = "scan" WHERE id = {row["id"]}').fetchall()
-                            elif row['task'] == 'pm_ready_refresh':
-                                # Plexmate Ready 새로고침
-                                pass
-                            elif row['task'] == 'refresh_pm_scan':
-                                # 새로고침 후 Plexmate 스캔
-                                cs.execute(f'UPDATE {table_jobs} SET task = "refresh_scan" WHERE id = {row["id"]}').fetchall()
-                                pass
-                            elif row['task'] == 'refresh_pm_periodic':
-                                # 새로고침 후 주기적 스캔
-                                cs.execute(f'UPDATE {table_jobs} SET task = "refresh_scan" WHERE id = {row["id"]}').fetchall()
-                                cs.execute(f'UPDATE {table_jobs} SET scan_mode = "periodic" WHERE id = {row["id"]}').fetchall()
-                                cs.execute(f'UPDATE {table_jobs} SET periodic_id = {int(row["target"])} WHERE id = {row["id"]}').fetchall()
-                                cs.execute(f'UPDATE {table_jobs} SET target = "" WHERE id = {row["id"]}').fetchall()
-                            elif row['task'] == 'refresh_scan':
-                                # 새로고침 후 웹 스캔
-                                cs.execute(f'UPDATE {table_jobs} SET scan_mode = "web" WHERE id = {row["id"]}').fetchall()
-
-                        # final check
-                        rows = cs.execute(f'SELECT * FROM "{table_jobs}"').fetchall()
-                        for row in rows:
-                            LOGGER.debug(f"{row['id']} | {row['ctime']} | {row['task']} | {row['desc']} | {row['target']} | {row['scan_mode']} | {row['periodic_id']}")
-                            #print(dict(row))
-                            if not row['task'] in TASK_KEYS:
-                                LOGGER.error(f'wrong task: {row["task"]}')
-                            if not row['scan_mode'] in SCAN_MODE_KEYS:
-                                LOGGER.error(f'wrong scan_mode: {row["scan_mode"]}')
-                    PLUGIN.ModelSetting.set(SETTING_DB_VERSION, '2')
-                elif current_db_ver == '2':
-                    LOGGER.debug('start migration from 2 to 3...')
-                    rows = cs.execute(f'SELECT name FROM pragma_table_info("{table_jobs}")').fetchall()
-                    cols = [row['name'] for row in rows]
-                    if 'clear_type' not in cols:
-                        cs.execute(f'ALTER TABLE "{table_jobs}" ADD COLUMN "clear_type" VARCHAR').fetchall()
-                    if 'clear_level' not in cols:
-                        cs.execute(f'ALTER TABLE "{table_jobs}" ADD COLUMN "clear_level" VARCHAR').fetchall()
-                    if 'clear_section' not in cols:
-                        cs.execute(f'ALTER TABLE "{table_jobs}" ADD COLUMN "clear_section" INTEGER').fetchall()
-                    PLUGIN.ModelSetting.set(SETTING_DB_VERSION, '3')
-                elif current_db_ver == '3':
-                    rows = cs.execute(f'UPDATE {table_jobs} SET journal = ""').fetchall()
-                connection.commit()
+                for ver in DB_VERSIONS[(DB_VERSIONS.index(current_db_ver)):]:
+                    migrations.migrate(ver, table_jobs, cs)
+                    current_db_ver = ver
+                conn.commit()
                 FRAMEWORK.db.session.flush()
-                connection.close()
-        except Exception as e:
-            LOGGER.error(f'Exception:{str(e)}')
-            LOGGER.error(traceback.format_exc())
+            LOGGER.debug(f'최종 DB 버전: {current_db_ver}')
+            PLUGIN.ModelSetting.set(SETTING_DB_VERSION, current_db_ver)
 
     def prerender(self, sub: str, req: LocalProxy) -> None:
         '''override'''
         super().prerender(sub, req)
-        try:
-            # yaml 파일 우선
-            PLUGIN.ModelSetting.set(SETTING_STARTUP_DEPENDENCIES, SettingAider().depends())
-        except Exception as e:
-            LOGGER.error(traceback.format_exc())
+        # yaml 파일 우선
+        PLUGIN.ModelSetting.set(SETTING_STARTUP_DEPENDENCIES, SettingAider().depends())
 
     def get_template_args(self) -> dict[str, Any]:
         '''override'''
@@ -455,7 +365,6 @@ class Setting(BaseModule):
     def process_command(self, command: str, arg1: str, arg2: str, arg3: str, req: LocalProxy) -> Response:
         '''ovverride'''
         ret = {'ret':'success', 'title': 'Rclone Remote'}
-        LOGGER.debug('command: %s' % command)
         try:
             if command == 'command_test_connection':
                 response = SettingAider().remote_command('vfs/list', arg1, arg2, arg3)
@@ -466,17 +375,17 @@ class Setting(BaseModule):
                 ret['modal'] = response.text
             elif command == 'save':
                 self.depends()
-        except Exception as e:
+        except:
             tb = traceback.format_exc()
             LOGGER.error(tb)
             ret['ret'] = 'failed'
             ret['modal'] = str(tb)
+        finally:
             return jsonify(ret)
-        return jsonify(ret)
 
     def setting_save_after(self, changes: list) -> None:
         '''override'''
-        LOGGER.debug(f'setting saved: {changes}')
+        LOGGER.debug(f'변경된 설정값: {changes}')
         for change in changes:
             if change == f'{self.name}_startup_dependencies':
                 SettingAider().depends(PLUGIN.ModelSetting.get(SETTING_STARTUP_DEPENDENCIES))
@@ -515,29 +424,32 @@ class Schedule(BaseModule):
 
     def process_command(self, command: str, arg1: str | None, arg2: str | None, arg3: str | None, request: LocalProxy) -> Response:
         '''override'''
-        LOGGER.debug(f'process_command: {command}, {arg1}, {arg2}, {arg3}')
+        LOGGER.debug(f'요청: {command}, {arg1}, {arg2}, {arg3}')
         try:
             # 일정 리스트는 Job.web_list()
             if command == 'list':
                 browseraider = BrowserAider()
                 dir_list = json.dumps(browseraider.get_dir(arg1))
                 PLUGIN.ModelSetting.set(SCHEDULE_WORKING_DIRECTORY, arg1)
-                result, data = True, dir_list
+                if dir_list:
+                    result, data = True, dir_list
+                else:
+                    result, data = False, '폴더 목록을 생성할 수 없습니다.'
             elif command == 'save':
                 job = Job.update_formdata(parse_qs(arg1))
                 if job.id > 0:
                     result, data = True, '저장했습니다.'
                 else:
-                    result, data = False, '저장에 실패했습니다.'
+                    result, data = False, '저장할 수 없습니다.'
             elif command == 'delete':
                 if Job.delete_by_id(arg1):
                     JobAider.set_schedule(int(arg1), False)
-                    result, data = True, f'삭제했습니다: ID {arg1}'
+                    result, data = True, f'삭제 했습니다: ID {arg1}'
                 else:
-                    result, data = False, f'삭제 실패: ID {arg1}'
+                    result, data = False, f'삭제할 수 없습니다: ID {arg1}'
             elif command == 'execute':
-                JobAider().start_job(Job.get_job(int(arg1)))
-                result, data = True, '작업이 끝났습니다.'
+                thread_func(JobAider().start_job, Job.get_job(int(arg1)))
+                result, data = True, '일정을 실행헀습니다.'
             elif command == 'schedule':
                 active = True if arg2.lower() == 'true' else False
                 result, data = JobAider.set_schedule(int(arg1), active)
@@ -559,7 +471,6 @@ class Schedule(BaseModule):
         jobaider = JobAider()
         for job in jobs:
             if job.schedule_mode == FF_SCHEDULE_KEYS[1]:
-                #JobAider().handle(job)
                 jobaider.start_job(job)
             elif job.schedule_mode == FF_SCHEDULE_KEYS[2] and job.schedule_auto_start:
                 jobaider.add_schedule(job.id)
@@ -615,11 +526,17 @@ class ToolTrash(BasePage):
 
     def process_command(self, command: str, arg1: str | None, arg2: str | None, arg3: str | None, request: LocalProxy) -> Response:
         '''override'''
-        LOGGER.debug(f'process_command: {command}, {arg1}, {arg2}, {arg3}')
+        LOGGER.debug(f'요청: {command}, {arg1}, {arg2}, {arg3}')
         try:
             status = PLUGIN.ModelSetting.get(TOOL_TRASH_TASK_STATUS)
             if command == 'status':
                 result, data = True, status
+            elif command == 'list':
+                section_id = int(arg1)
+                page_no = int(arg2)
+                limit = int(arg3)
+                plexmateaider = PlexmateAider()
+                result, data = True, plexmateaider.get_trash_list(section_id, page_no, limit)
             elif command == 'stop':
                 if status == STATUS_KEYS[1] or status == STATUS_KEYS[3]:
                     PLUGIN.ModelSetting.set(TOOL_TRASH_TASK_STATUS, STATUS_KEYS[3])
@@ -627,24 +544,21 @@ class ToolTrash(BasePage):
                 else:
                     result, data = False, "실행중이 아닙니다."
             elif status == STATUS_KEYS[0]:
-                if command == 'list':
-                    section_id = int(arg1)
-                    page_no = int(arg2)
-                    limit = int(arg3)
-                    plexmateaider = PlexmateAider()
-                    result, data = True, plexmateaider.get_trash_list(section_id, page_no, limit)
-                elif command == 'delete':
+                if command == 'delete':
                     metadata_id = int(arg1)
                     mediaitem_id = int(arg2)
                     result, data = True, PlexmateAider().delete_media(metadata_id, mediaitem_id)
                 elif command in TASK_KEYS:
                     result, data = self.task_command(command, arg1, arg2, arg3)
                 elif command in TOOL_TRASH_KEYS:
-                    job = Job.get_job()
-                    job.task = command
-                    job.section_id = int(arg1)
-                    JobAider().start_job(job)
-                    result, data = True, f'작업이 끝났습니다.'
+                    if status == STATUS_KEYS[0]:
+                        job = Job.get_job()
+                        job.task = command
+                        job.section_id = int(arg1)
+                        thread_func(JobAider().start_job, job)
+                        result, data = True, f'작업을 실행했습니다.'
+                    else:
+                        result, data = False, '작업이 실행중입니다.'
                 else:
                     result, data = False, f'알 수 없는 명령입니다: {command}'
             else:

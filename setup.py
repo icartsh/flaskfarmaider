@@ -1,5 +1,3 @@
-import traceback
-
 from flask import Response, render_template, jsonify
 from werkzeug.local import LocalProxy
 from flask_sqlalchemy.query import Query
@@ -34,9 +32,9 @@ config = {
             },
             {
                 'uri': TOOL,
-                'name': '도구 (개발중)',
+                'name': '도구',
                 'list': [
-                    {'uri': TOOL_TRASH, 'name': 'Plex 휴지통 스캔'},
+                    {'uri': TOOL_TRASH, 'name': 'Plex 휴지통 스캔(개발중)'},
                 ]
             },
             {
@@ -57,12 +55,9 @@ P = create_plugin_instance(config)
 PLUGIN = P
 LOGGER = PLUGIN.logger
 
-try:
-    from .presenters import Setting
-    from .presenters import Schedule
-    from .presenters import Manual
-    from .presenters import Tool
+from .presenters import Setting
+from .presenters import Schedule
+from .presenters import Manual
+from .presenters import Tool
 
-    PLUGIN.set_module_list([Setting, Schedule, Manual, Tool])
-except Exception as e:
-    LOGGER.debug(traceback.format_exc())
+PLUGIN.set_module_list([Setting, Schedule, Manual, Tool])

@@ -107,7 +107,7 @@ class Job(ModelBase):
                     LOGGER.debug(f'일정에 재등록합니다: {schedule_id}')
                     JobAider.add_schedule(model.id)
             model.save()
-        except Exception:
+        except:
             LOGGER.error(traceback.format_exc())
             LOGGER.error('작업을 저장하지 못했습니다.')
         finally:
@@ -176,6 +176,5 @@ class Job(ModelBase):
             ret['paging'] = cls.get_paging_info(count, page, page_size)
             PLUGIN.ModelSetting.set(f'{SCHEDULE}_last_list_option', f'{order}|{page}|{search}|{option1}|{option2}')
             return ret
-        except Exception as e:
-            LOGGER.error(f"Exception:{str(e)}")
+        except:
             LOGGER.error(traceback.format_exc())

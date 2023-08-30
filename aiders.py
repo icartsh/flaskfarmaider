@@ -72,7 +72,7 @@ class Aider:
                 return requests.request('POST', url, json=data if data else {}, **kwds)
             else:
                 return requests.request(method, url, data=data, **kwds)
-        except Exception:
+        except:
             tb = traceback.format_exc()
             LOGGER.error(tb)
             response = requests.Response()
@@ -96,7 +96,6 @@ class JobAider(Aider):
     @FRAMEWORK.celery.task(bind=True)
     def start_job(self, job: ModelBase) -> None:
         # bind=True, self 는 task 의 instance
-        LOGGER.debug(f'작업을 시작합니다: {job.id if job.id else -1}. {job.task} {job.desc}')
         if job.task == TASK_KEYS[0]:
             '''refresh_scan'''
             plexmateaider = PlexmateAider()
@@ -131,15 +130,10 @@ class JobAider(Aider):
             if targets:
                 rcloneaider = RcloneAider()
                 for target in targets:
-                    try:
-                        response = rcloneaider.vfs_refresh(target)
-                        result, reason = rcloneaider.is_successful(response)
-                        if result:
-                            reason = None
-                    except Exception as e:
-                        reason = str(e)
-                    if reason:
-                        LOGGER.warning(f'새로고침 실패:  [{target}]: {reason}')
+                    response = rcloneaider.vfs_refresh(target)
+                    result, reason = rcloneaider.is_successful(response)
+                    if not result:
+                        LOGGER.warning(f'새로고침 실패: [{target}]: {reason}')
             else:
                 LOGGER.info(f'새로고침 대상이 없습니다.')
         elif job.task == TASK_KEYS[4]:
@@ -159,7 +153,8 @@ class JobAider(Aider):
             PLUGIN.ModelSetting.set(TOOL_TRASH_TASK_STATUS, STATUS_KEYS[1])
             try:
                 plexmateaider = PlexmateAider()
-                if job.task == TOOL_TRASH_KEYS[2]:
+                if job.task == TOOL_TRASH_KEYS[2] and \
+                PLUGIN.ModelSetting.get(TOOL_TRASH_TASK_STATUS) == STATUS_KEYS[1]:
                     plexmateaider.empty_trash(job.section_id)
                 else:
                     # get trash items
@@ -167,26 +162,24 @@ class JobAider(Aider):
                     paths = {Path(row['file']).parent for row in trashes}
                     rcloneaider = RcloneAider()
                     for path in paths:
-                        if PLUGIN.ModelSetting.get(TOOL_TRASH_TASK_STATUS) == STATUS_KEYS[3]:
+                        if PLUGIN.ModelSetting.get(TOOL_TRASH_TASK_STATUS) != STATUS_KEYS[1]:
                             LOGGER.info(f'작업을 중지합니다.')
                             break
                         if job.task == TOOL_TRASH_KEYS[0] or \
                         job.task == TOOL_TRASH_KEYS[3] or \
                         job.task == TOOL_TRASH_KEYS[4]:
-                            LOGGER.debug(f'새로고침 중: {path}')
                             rcloneaider.vfs_refresh(path)
                         if job.task == TOOL_TRASH_KEYS[1] or \
                         job.task == TOOL_TRASH_KEYS[3] or \
                         job.task == TOOL_TRASH_KEYS[4]:
-                            LOGGER.debug(f'스캔 중: {path}')
                             plexmateaider.scan(SCAN_MODE_KEYS[2], path)
-                    if job.task == TOOL_TRASH_KEYS[4]:
+                    if job.task == TOOL_TRASH_KEYS[4] and \
+                    PLUGIN.ModelSetting.get(TOOL_TRASH_TASK_STATUS) == STATUS_KEYS[1]:
                         plexmateaider.empty_trash(job.section_id)
             except:
                 LOGGER.error(traceback.format_exc())
             finally:
                 PLUGIN.ModelSetting.set(TOOL_TRASH_TASK_STATUS, STATUS_KEYS[0])
-        LOGGER.debug(f'작업이 끝났습니다: {job.id if job.id else -1}. {job.task} {job.desc}')
 
     @classmethod
     def create_schedule_id(cls, job_id: int, middle: str = SCHEDULE) -> str:
@@ -235,7 +228,7 @@ class SettingAider(Aider):
 
     def remote_command(self, command: str, url: str, username: str, password: str) -> requests.Response:
         LOGGER.debug(url)
-        return requests.post('{}/{}'.format(url, command), auth=(username, password))
+        return self.reqest('POST', f'{url}/{command}', auth=(username, password))
 
     def depends(self, text: str = None):
         try:
@@ -371,7 +364,7 @@ class PlexmateAider(PluginAider):
             if section_data:
                 name = section_data.get('name')
             else:
-                LOGGER.debug(f'skip nonexistent section: {section}')
+                LOGGER.debug(f'존재하지 않는 섹션: {section}')
                 continue
             periodics.append({'idx': idx, 'name': name, 'desc': job.get('설명', '')})
         return periodics
@@ -484,7 +477,7 @@ class PlexmateAider(PluginAider):
                 if longer.startswith(shorter):
                     founds.add(int(row['library_section_id']))
             if founds:
-                LOGGER.debug(f'섹션 ID 확인: {target} in {founds}')
+                LOGGER.debug(f'섹션 ID: {founds}')
                 for section_id in founds:
                     section = self.plex_server.library.sectionByID(section_id)
                     max_seconds = 300
@@ -501,8 +494,6 @@ class PlexmateAider(PluginAider):
                             break
                         time.sleep(1)
                         section.reload()
-                        if int(time.time() - start) % 30 == 0:
-                            LOGGER.debug(f'스캔 중: {target} ... {(time.time() - start):.1f}s')
                     if time.time() - start > max_seconds:
                         LOGGER.warning(f'스캔 대기 시간 초과: {target} ... {(time.time() - start):.1f}s')
                     else:
@@ -528,15 +519,16 @@ class PlexmateAider(PluginAider):
 
     def get_periodic_locations(self, periodic_id: int) -> list[str]:
         job = self.get_periodic_job(periodic_id)
-        if job.get('폴더'):
-            targets = list(job.get('폴더'))
-        else:
-            try:
+        try:
+            if job.get('폴더'):
+                targets = list(job.get('폴더'))
+            else:
                 targets = self.get_locations_by_id(job.get('섹션ID'))
-            except Exception:
-                LOGGER.error(traceback.format_exc())
-                targets = []
-        return targets
+        except:
+            LOGGER.error(traceback.format_exc())
+            targets = []
+        finally:
+            return targets
 
     def get_periodic_job(self, periodic_id: int) -> dict:
         mod = self.get_module('periodic')
@@ -546,7 +538,8 @@ class PlexmateAider(PluginAider):
         except IndexError:
             LOGGER.error(f'주기적 스캔 작업을 찾을 수 없습니다: {periodic_id + 1}')
             job = {}
-        return job
+        finally:
+            return job
 
     def clear_section(self, section_id: int, clear_type: str, clear_level: str) -> None:
         mod = self.get_module('clear')
@@ -566,11 +559,6 @@ class PlexmateAider(PluginAider):
             'X-Plex-Token': plex_token
         }
         response = self.request('DELETE', url, params=params)
-        LOGGER.debug(f'미디어 ID: {media_id}, 응답 코드: {response.status_code}')
-        if str(response.status_code).startswith('2'):
-            return '삭제했습니다.'
-        else:
-            return '오류가 발생했습니다.'
         """
         try:
             video = self.plex_server.library.fetchItem(meta_id, Media__id=media_id).reload()
@@ -581,12 +569,12 @@ class PlexmateAider(PluginAider):
                         if not part.exists:
                             non_exists.append(part.file)
                     if non_exists:
-                        LOGGER.debug(f'delete: {non_exists}')
+                        LOGGER.debug(f'삭제: {non_exists}')
                         media.delete()
             return '삭제했습니다.'
         except:
             LOGGER.error(traceback.format_exc())
-            return f'오류가 발생했습니다.'
+            return '오류가 발생했습니다.'
 
     def empty_trash(self, section_id: int) -> None:
         LOGGER.debug(f'휴지통을 비우는 중입니다: {section_id}')
@@ -598,14 +586,14 @@ class RcloneAider(Aider):
     def __init__(self):
         super().__init__()
 
-    def get_metadata_cache(self, fs: str) -> dict[str, Any]:
-        return self.vfs_stats(fs).json().get("metadataCache")
+    def get_metadata_cache(self, fs: str) -> tuple[int, int]:
+        result = self.vfs_stats(fs).json().get("metadataCache")
+        return result.get('dirs', 0), result.get('files', 0)
 
     def vfs_stats(self, fs: str) -> Response:
         return self.command("vfs/stats", data={"fs": fs})
 
     def command(self, command: str, data: dict = None) -> Response:
-        LOGGER.debug(f'command: {command}, parameters: {data}')
         return self.request(
             "JSON",
             f'{PLUGIN.ModelSetting.get(SETTING_RCLONE_REMOTE_ADDR)}/{command}',
@@ -619,10 +607,12 @@ class RcloneAider(Aider):
             'fs': fs if fs else PLUGIN.ModelSetting.get(SETTING_RCLONE_REMOTE_VFS),
             'dir': remote_path
         }
-        LOGGER.debug(f'새로고침 전: {self.get_metadata_cache(data["fs"])}')
+        start_dirs, start_files = self.get_metadata_cache(data["fs"])
+        start = time.time()
         response = self.command('vfs/refresh', data=data)
+        dirs, files = self.get_metadata_cache(data["fs"])
         self.log_response(response)
-        LOGGER.debug(f'새로고침 후: {self.get_metadata_cache(data["fs"])}')
+        LOGGER.debug(f'vfs/refresh: dirs={dirs - start_dirs} files={files - start_files} elapsed={(time.time() - start):.1f}s')
         return response
 
     def vfs_refresh(self, local_path: str) -> Response:
@@ -631,7 +621,7 @@ class RcloneAider(Aider):
         if local_path.is_file():
             response = requests.Response()
             response.status_code = 0
-            reason = 'already exists'
+            reason = '이미 존재하는 파일입니다.'
             response._content = bytes(reason, 'utf-8')
             LOGGER.debug(f'{reason}: {local_path}')
         else:
@@ -640,17 +630,15 @@ class RcloneAider(Aider):
             already_exists = test_dirs[0].exists()
             while not test_dirs[-1].exists():
                 test_dirs.append(test_dirs[-1].parent)
-            LOGGER.debug(f"testing: {str(test_dirs)}")
+            LOGGER.debug(f"경로 검사: {str(test_dirs)}")
             mappings = self.parse_mappings(PLUGIN.ModelSetting.get(SETTING_RCLONE_MAPPING))
             while test_dirs:
                 # vfs/refresh 후
                 response = self._vfs_refresh(self.update_path(str(test_dirs[-1]), mappings))
                 # 타겟이 존재하는지 점검
                 if local_path.exists():
-                    LOGGER.debug(f'EXISTS: {local_path}')
                     # 존재하지 않았던 폴더면 vfs/refresh
                     if not local_path.is_file() and not already_exists:
-                        LOGGER.debug(f'is already exists? : {already_exists}')
                         self._vfs_refresh(self.update_path(str(local_path), mappings))
                         # 새로운 폴더를 새로고침 후 한번 더 타겟 경로 존재 점검
                         if not local_path.exists() and len(test_dirs) > 1: continue
@@ -660,7 +648,6 @@ class RcloneAider(Aider):
                     if not result:
                         LOGGER.error(f'새로고침 실패: {reason}: {test_dirs[-1]}')
                         break
-                    LOGGER.debug(f'still not exists...')
                 # 타겟이 아직 존재하지 않으면 다음 상위 경로로 시도
                 test_dirs.pop()
         return response
@@ -681,8 +668,8 @@ class RcloneAider(Aider):
                     return False, result
             else:
                 return False, _json.get('error')
-        except Exception as e:
-            LOGGER.error(str(e))
+        except:
+            LOGGER.error(traceback.format_exc())
             return False, response.text
 
 
@@ -707,7 +694,7 @@ class StatupAider(Aider):
                     kwds['shell'] = False
                 return subprocess.run(args, stdout=stdout, stderr=stderr, encoding=encoding, **kwds)
             except Exception as e:
-                LOGGER.error(str(e))
+                LOGGER.error(traceback.format_exc())
                 return subprocess.CompletedProcess(args, returncode=1, stderr='', stdout=str(e))
 
     def startup(self) -> None:

@@ -82,3 +82,5 @@ SCHEDULE_WORKING_DIRECTORY = f'{SCHEDULE}_working_directory'
 SCHEDULE_LAST_LIST_OPTION = f'{SCHEDULE}_last_list_option'
 
 TOOL_TRASH_TASK_STATUS = f'{TOOL}_{TOOL_TRASH}_task_status'
+
+DB_VERSIONS = ['1', '2', '3', '4']

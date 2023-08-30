@@ -42,7 +42,7 @@ function init_schedule() {
     SCH_FORM_TASK = build_sch_form_select('sch-task', '작업', TASK_OPTS, 9, '일정으로 등록할 작업');
     SCH_FORM_DESC = build_sch_form_text('sch-description', '설명', '', 9, '일정 목록에 표시될 제목');
     SCH_FORM_GROUP_TASK = build_sch_form_group('sch-form-group-task', [SCH_FORM_TASK, SCH_FORM_DESC, SCH_FORM_LINE]);
-    SCH_FORM_PATH = build_sch_form_text('sch-target-path', '로컬 경로', '', 9, '새로고침/스캔 할 경로<br>Flaskfarm에서 접근 가능한 로컬 경로');
+    SCH_FORM_PATH = build_sch_form_text_btn('sch-target-path', '로컬 경로', '', 'sch-target-path-btn', '경로 탐색', 10, '새로고침/스캔 할 경로<br>Flaskfarm에서 접근 가능한 로컬 경로');
     SCH_FORM_GROUP_PATH = build_sch_form_group('sch-form-group-path', [SCH_FORM_PATH, SCH_FORM_LINE]);
     SCH_FORM_VFS = build_sch_form_text('sch-vfs', 'VFS 리모트', '', 5, 'rclone rc로 접근 가능한 리모트 이름<br>ex. gds:');
     SCH_FORM_RECURSIVE = build_sch_form_checkbox('sch-recursive', 'recursive', 'off', 9, 'rclone refresh의 --recursive 옵션 적용 여부');
@@ -70,6 +70,16 @@ function init_schedule() {
     E_GROUP_TASK = $('#sch-form-group-task');
     E_SCH_SETTING.append(SCH_FORM_GROUP_PATH);
     E_PATH = $('#sch-target-path');
+    E_PATH_BTN = $('#sch-target-path-btn');
+    E_PATH_BTN.on('click', function(e){
+        e.preventDefault();
+        var path = E_PATH.val().trim();
+        if (path == '') path = '/';
+        globalSelectLocalFile('경로 선택', path, function(result){
+            E_PATH.val(result);
+        });
+    });
+
     E_GROUP_PATH = $('#sch-form-group-path');
     E_SCH_SETTING.append(SCH_FORM_GROUP_RCLONE);
     E_VFS = $('#sch-vfs');
@@ -205,9 +215,6 @@ function init_trash() {
         globalSendCommandPage('stop', '', '', '', function(result) {
             if (result.success) {
                 notify(result.data, 'success');
-                setTimeout(() => globalSendCommandPage('status', '', '', '', function(result) {
-                    trash_toogle_execute_btn(result.data);
-                }), 5000);
             } else {
                 notify(result.data, 'warning');
             }
@@ -216,42 +223,15 @@ function init_trash() {
     E_TRASH_TASK = $('#trash-task');
     E_TRASH_BTN_EXCEUTE = $('#trash-btn-execute');
     E_TRASH_BTN_EXCEUTE.on('click', function(e) {
-        globalSendCommandPage('status', '', '', '', function(result) {
-            trash_toogle_execute_btn(result.data);
-        });
         globalSendCommandPage(E_TRASH_TASK.prop('value'), E_TRASH_SECTIONS.prop('value'), '', '', function(result) {
             if (result.success) {
                 notify(result.data, 'success');
-                trash_get_list(E_TRASH_SECTIONS.prop('value'), 1);
             } else {
                 notify(result.data, 'warning');
             }
-            globalSendCommandPage('status', '', '', '', function(result) {
-                trash_toogle_execute_btn(result.data);
-            });
-        });
-        notify('작업을 실행합니다.', 'success');
-        globalSendCommandPage('status', '', '', '', function(result) {
-            trash_toogle_execute_btn(result.data);
         });
     });
-    trash_toogle_execute_btn(TOOL_TRASH_TASK_STATUS);
 }
-
-function trash_toogle_execute_btn(status) {
-    if (status == STATUS_KEYS[0]) {
-        E_TRASH_BTN_EXCEUTE.children('span').eq(0).prop('class', 'd-none');
-        E_TRASH_BTN_EXCEUTE.children('span').eq(1).text('실행');
-        E_TRASH_BTN_EXCEUTE.prop('class', 'btn btn-primary px-5');
-        E_TRASH_BTN_EXCEUTE.prop('disabled', false);
-    } else {
-        E_TRASH_BTN_EXCEUTE.children('span').eq(0).prop('class', 'spinner-border spinner-border-sm text-success');
-        E_TRASH_BTN_EXCEUTE.children('span').eq(1).text('실행중');
-        E_TRASH_BTN_EXCEUTE.prop('class', 'btn btn-danger px-5');
-        E_TRASH_BTN_EXCEUTE.prop('disabled', true);
-    }
-}
-
 
 async function trash_get_list(lib_id, page_no) {
     globalSendCommandPage('list', lib_id, page_no, 50, function(result) {
@@ -406,9 +386,6 @@ function copy_to_clipboard(text) {
 }
 
 function browser_command(cmd) {
-    if (cmd.command != 'list') {
-        notify('작업을 실행합니다.', 'success');
-    }
     globalSendCommand(cmd.command, cmd.path, cmd.recursive, cmd.scan_mode + "|-1", function(result) {
         if (result.success) {
             if (cmd.command == 'list') {
@@ -642,7 +619,7 @@ function make_list(data) {
                 disabled: function(){return $(this).hasClass('dir-file');},
                 callback: function(key, opt, e) {
                     data = opt.$trigger.data();
-                    confirm_modal('ID: ' + data.id + ' 일정 삭제', "일정을 삭제할까요?", function() {
+                    confirm_modal('일정을 삭제할까요?', 'ID: ' + data.id + '<br />작업: ' + TASKS[data.task].name, function() {
                         globalSendCommand("delete", data.id, null, null, function(result) {
                             if (result.success) {
                                 globalRequestSearch('1');
@@ -659,8 +636,7 @@ function make_list(data) {
                 icon: 'fa-play',
                 callback: function(key, opt, e) {
                     data = opt.$trigger.data();
-                    confirm_modal('ID: ' + data.id + ' 일정 실행', '일정을 실행할까요?', function() {
-                        notify('일정을 실행했습니다.', 'success');
+                    confirm_modal('일정을 실행할까요?', 'ID: ' + data.id + '<br />작업: ' + TASKS[data.task].name, function() {
                         globalSendCommand("execute", data.id, null, null, function(result) {
                             globalRequestSearch('1');
                             notify(result.data, 'success');
@@ -691,10 +667,12 @@ function disabled_by_scan_mode(mode) {
         case SCAN_MODE_KEYS[0]:
         case SCAN_MODE_KEYS[2]:
             E_PATH.prop('disabled', false);
+            E_PATH_BTN.prop('disabled', false);
             E_SCAN_PERIODIC_ID.prop('disabled', true);
             break;
         case SCAN_MODE_KEYS[1]:
             E_PATH.prop('disabled', true);
+            E_PATH_BTN.prop('disabled', true);
             E_SCAN_PERIODIC_ID.prop('disabled', false);
             break;
     }
@@ -820,6 +798,15 @@ function build_sch_form_select(id, title, options, col, desc) {
 function build_sch_form_text(id, title, value, col, desc) {
     element = bulid_sch_form_header(title, col);
     element += '<input id="' + id + '" name="' + id + '" type="text" class="form-control form-control-sm" value="' + value + '" />';
+    element += build_sch_form_footer(desc);
+    return element;
+}
+
+function build_sch_form_text_btn(id, title, value, btn_id, btn_text, col, desc) {
+    element = bulid_sch_form_header(title, col);
+    element += '<input id="' + id + '" name="' + id + '" type="text" class="form-control form-control-sm" value="' + value + '" />';
+    element += '<div class="btn-group btn-group-sm flex-wrap mr-2" role="group" style="padding-left:5px; padding-top:0px">';
+    element += '<button id="' + btn_id + '" class="btn btn-sm btn-outline-primary">' + btn_text + '</button></div>';
     element += build_sch_form_footer(desc);
     return element;
 }
