@@ -5,11 +5,11 @@ from .constants import TASK_KEYS, SCAN_MODE_KEYS
 
 
 def migrate(ver: str, table, cs: sqlite3.Cursor) -> None:
-    if ver == '2':
+    if ver == '1':
         migrate_v2(cs, table)
-    elif ver == '3':
+    elif ver == '2':
         migrate_v3(cs, table)
-    elif ver == '4':
+    elif ver == '3':
         migrate_v4(cs, table)
 
 
@@ -108,4 +108,7 @@ def migrate_v3(cs: sqlite3.Cursor, table: str) -> None:
 
 def migrate_v4(cs: sqlite3.Cursor, table: str) -> None:
     LOGGER.debug('DB 버전 4 로 마이그레이션')
-    cs.execute(f'UPDATE {table} SET journal = ""').fetchall()
+    try:
+        cs.execute(f'ALTER TABLE "{table}" DROP COLUMN "journal"').fetchall()
+    except Exception as e:
+        LOGGER.error(e)

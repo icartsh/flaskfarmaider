@@ -304,7 +304,7 @@ class Setting(BaseModule):
     def __init__(self, plugin: PluginBase) -> None:
         super().__init__(plugin, name=SETTING)
         self.db_default = {
-            SETTING_DB_VERSION: '3',
+            SETTING_DB_VERSION: '4',
             SETTING_RCLONE_REMOTE_ADDR: 'http://172.17.0.1:5572',
             SETTING_RCLONE_REMOTE_VFS: '',
             SETTING_RCLONE_REMOTE_USER: '',

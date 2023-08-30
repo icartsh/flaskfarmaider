@@ -26,7 +26,6 @@ class Job(ModelBase):
     schedule_interval = FRAMEWORK.db.Column(FRAMEWORK.db.String)
     schedule_auto_start = FRAMEWORK.db.Column(FRAMEWORK.db.Boolean)
     status = FRAMEWORK.db.Column(FRAMEWORK.db.String)
-    journal = FRAMEWORK.db.Column(FRAMEWORK.db.Text)
     scan_mode = FRAMEWORK.db.Column(FRAMEWORK.db.String)
     periodic_id = FRAMEWORK.db.Column(FRAMEWORK.db.Integer)
     clear_type = FRAMEWORK.db.Column(FRAMEWORK.db.String)
