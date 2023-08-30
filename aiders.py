@@ -469,22 +469,22 @@ class PlexmateAider(PluginAider):
             mappings = self.parse_mappings(PLUGIN.ModelSetting.get(SETTING_PLEXMATE_PLEX_MAPPING))
             target = self.update_path(target, mappings)
             rows = self.db.select('SELECT library_section_id, root_path FROM section_locations')
-            founds = set()
+            founds = {}
             for row in rows:
                 root = row['root_path']
                 longer = target if len(target) >= len(root) else root
                 shorter = target if len(target) < len(root) else root
                 if longer.startswith(shorter):
-                    founds.add(int(row['library_section_id']))
+                    founds[int(row['library_section_id'])] = longer
             if founds:
-                LOGGER.debug(f'섹션 ID: {founds}')
-                for section_id in founds:
+                LOGGER.debug(f'섹션 ID: {founds.keys()}')
+                for section_id, location in founds.items():
                     section = self.plex_server.library.sectionByID(section_id)
                     max_seconds = 300
                     start = time.time()
-                    section.update(path=target)
+                    section.update(path=location)
                     section.reload()
-                    LOGGER.debug(f'스캔 중: {target}')
+                    LOGGER.debug(f'스캔 중: {section.title}: {location}')
                     '''
                     스캔 추적을 섹션 상태에 의존
                     다른 곳에서 동일 섹션을 스캔 시도할 경우?
@@ -495,9 +495,9 @@ class PlexmateAider(PluginAider):
                         time.sleep(1)
                         section.reload()
                     if time.time() - start > max_seconds:
-                        LOGGER.warning(f'스캔 대기 시간 초과: {target} ... {(time.time() - start):.1f}s')
+                        LOGGER.warning(f'스캔 대기 시간 초과: {section.title}: {location} ... {(time.time() - start):.1f}s')
                     else:
-                        LOGGER.info(f'스캔 완료: {target} ... {(time.time() - start):.1f}s')
+                        LOGGER.info(f'스캔 완료: {section.title}: {location} ... {(time.time() - start):.1f}s')
             else:
                 LOGGER.error(f'섹션 ID를 찾을 수 없습니다: {target}')
         elif scan_mode == SCAN_MODE_KEYS[1]:
