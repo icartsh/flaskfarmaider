@@ -477,7 +477,7 @@ class PlexmateAider(PluginAider):
                 if longer.startswith(shorter):
                     founds[int(row['library_section_id'])] = longer
             if founds:
-                LOGGER.debug(f'섹션 ID: {founds.keys()}')
+                LOGGER.debug(f'섹션 ID 검색 결과: {list(founds.keys())}')
                 for section_id, location in founds.items():
                     section = self.plex_server.library.sectionByID(section_id)
                     max_seconds = 300
