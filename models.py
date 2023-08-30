@@ -116,11 +116,12 @@ class Job(ModelBase):
     @classmethod
     def get_job(cls, id: int = -1, info: dict = None) -> ModelBase:
         if id > 0:
-            return cls.get_by_id(id)
+            job = cls.get_by_id(id)
         elif info:
-            return Job().update(info)
+            job = Job().update(info)
         else:
-            return Job()
+            job = Job()
+        return job
 
     @classmethod
     def make_query(cls, request: LocalProxy, order: str ='desc', search: str = '', option1: str = 'all', option2: str = 'all') -> Query:

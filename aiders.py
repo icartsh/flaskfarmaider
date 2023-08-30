@@ -85,7 +85,7 @@ class Aider:
             msg = f'code: {response.status_code}, content: {response.json()}'
         except requests.exceptions.JSONDecodeError:
             msg = f'code: {response.status_code}, content: {response.text}'
-        LOGGER.info(msg)
+        LOGGER.debug(msg)
 
 
 class JobAider(Aider):
@@ -105,15 +105,15 @@ class JobAider(Aider):
                 # 주기적 스캔 작업 새로고침
                 targets = plexmateaider.get_periodic_locations(job.periodic_id)
                 for target in targets:
-                    rcloneaider.vfs_refresh(target)
+                    rcloneaider.vfs_refresh(target, job.recursive, job.vfs)
             else:
-                rcloneaider.vfs_refresh(job.target)
+                rcloneaider.vfs_refresh(job.target, job.recursive, job.vfs)
             # scan
             plexmateaider.scan(job.scan_mode, job.target, job.periodic_id)
         elif job.task == TASK_KEYS[1]:
             '''refresh'''
             rcloneaider = RcloneAider()
-            rcloneaider.vfs_refresh(job.target)
+            rcloneaider.vfs_refresh(job.target,  job.recursive, job.vfs)
             pass
         elif job.task == TASK_KEYS[2]:
             '''scan'''
@@ -130,12 +130,12 @@ class JobAider(Aider):
             if targets:
                 rcloneaider = RcloneAider()
                 for target in targets:
-                    response = rcloneaider.vfs_refresh(target)
+                    response = rcloneaider.vfs_refresh(target, job.recursive, job.vfs)
                     result, reason = rcloneaider.is_successful(response)
                     if not result:
                         LOGGER.warning(f'새로고침 실패: [{target}]: {reason}')
             else:
-                LOGGER.info(f'새로고침 대상이 없습니다.')
+                LOGGER.info(f'plex_mate 새로고침 대상이 없습니다.')
         elif job.task == TASK_KEYS[4]:
             '''clear'''
             plexmateaider = PlexmateAider()
@@ -168,7 +168,7 @@ class JobAider(Aider):
                         if job.task == TOOL_TRASH_KEYS[0] or \
                         job.task == TOOL_TRASH_KEYS[3] or \
                         job.task == TOOL_TRASH_KEYS[4]:
-                            rcloneaider.vfs_refresh(path)
+                            rcloneaider.vfs_refresh(path, job.recursive, job.vfs)
                         if job.task == TOOL_TRASH_KEYS[1] or \
                         job.task == TOOL_TRASH_KEYS[3] or \
                         job.task == TOOL_TRASH_KEYS[4]:
@@ -594,6 +594,7 @@ class RcloneAider(Aider):
         return self.command("vfs/stats", data={"fs": fs})
 
     def command(self, command: str, data: dict = None) -> Response:
+        LOGGER.debug(f'Rclone RC: {command} {data}')
         return self.request(
             "JSON",
             f'{PLUGIN.ModelSetting.get(SETTING_RCLONE_REMOTE_ADDR)}/{command}',
@@ -612,10 +613,10 @@ class RcloneAider(Aider):
         response = self.command('vfs/refresh', data=data)
         dirs, files = self.get_metadata_cache(data["fs"])
         self.log_response(response)
-        LOGGER.debug(f'vfs/refresh: dirs={dirs - start_dirs} files={files - start_files} elapsed={(time.time() - start):.1f}s')
+        LOGGER.info(f'vfs/refresh: dirs={dirs - start_dirs} files={files - start_files} elapsed={(time.time() - start):.1f}s')
         return response
 
-    def vfs_refresh(self, local_path: str) -> Response:
+    def vfs_refresh(self, local_path: str, recursive: bool = False, fs: str = None) -> Response:
         # 이미 존재하는 파일이면 패스, 존재하지 않은 파일/폴더, 존재하는 폴더이면 진행
         local_path = Path(local_path)
         if local_path.is_file():
@@ -634,12 +635,12 @@ class RcloneAider(Aider):
             mappings = self.parse_mappings(PLUGIN.ModelSetting.get(SETTING_RCLONE_MAPPING))
             while test_dirs:
                 # vfs/refresh 후
-                response = self._vfs_refresh(self.update_path(str(test_dirs[-1]), mappings))
+                response = self._vfs_refresh(self.update_path(str(test_dirs[-1]), mappings), recursive, fs)
                 # 타겟이 존재하는지 점검
                 if local_path.exists():
                     # 존재하지 않았던 폴더면 vfs/refresh
                     if not local_path.is_file() and not already_exists:
-                        self._vfs_refresh(self.update_path(str(local_path), mappings))
+                        self._vfs_refresh(self.update_path(str(local_path), mappings), recursive, fs)
                         # 새로운 폴더를 새로고침 후 한번 더 타겟 경로 존재 점검
                         if not local_path.exists() and len(test_dirs) > 1: continue
                     break
