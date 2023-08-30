@@ -228,7 +228,8 @@ class SettingAider(Aider):
 
     def remote_command(self, command: str, url: str, username: str, password: str) -> requests.Response:
         LOGGER.debug(url)
-        return self.reqest('POST', f'{url}/{command}', auth=(username, password))
+
+        return self.request('POST', f'{url}/{command}', auth=(username, password))
 
     def depends(self, text: str = None):
         try:
